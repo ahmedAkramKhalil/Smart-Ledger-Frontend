@@ -1,0 +1,13 @@
+{
+  "name": "smart-ledger-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Smart Ledger AI",
+  "scripts": {
+    "start": "python -m http.server 3000",
+    "dev": "python -m http.server 3000"
+  },
+  "keywords": ["fintech", "banking", "ai"],
+  "author": "Your Name",
+  "license": "MIT"
+}
+
