@@ -411,47 +411,61 @@ function renderUpload() {
   return `
     <div>
       <div class="card" style="margin-bottom: 20px;">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">${t('upload.uploadBtn')}</h3>
-        <div class="upload-area" id="uploadArea" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" onclick="document.getElementById('fileInput').click()">
-          <div class="upload-icon"><i class="mdi mdi-cloud-upload"></i></div>
-          <div class="upload-text">${t('upload.dragDrop')}</div>
-          <div class="upload-subtext">PDF, Excel, CSV (Max 10MB)</div>
-          <input type="file" id="fileInput" style="display:none;" accept=".pdf,.xlsx,.xls,.csv" onchange="handleFileSelect(event)">
+        <h3 style="margin-bottom: 15px; font-weight: 300;">Upload File</h3>
+        
+        <div class="upload-area" 
+             id="uploadArea" 
+             onclick="document.getElementById('fileInput').click()"
+             style="cursor: pointer; padding: 40px; text-align: center; border: 2px dashed var(--border-color); border-radius: 8px;">
+          <div style="font-size: 30px; margin-bottom: 10px;">📄</div>
+          <div>Click to select file</div>
         </div>
+
+        <!-- IMPORTANT: File input must be here -->
+        <input type="file" 
+               id="fileInput" 
+               style="display: none;" 
+               accept=".csv,.xlsx,.xls,.txt"
+               onchange="handleFileSelect(event)">
       </div>
 
+      <!-- Upload history table -->
       ${state.uploads.length > 0 ? `
         <div class="card">
-          <h3 style="margin-bottom: 15px; font-weight: 300;">${t('upload.recentUploads')}</h3>
-          <div class="table-wrapper">
-            <table>
-              <thead>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Status</th>
+                <th>Transactions</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${state.uploads.map(u => `
                 <tr>
-                  <th>${t('upload.fileName')}</th>
-                  <th>${t('upload.fileType')}</th>
-                  <th>${t('upload.status')}</th>
-                  <th>${t('upload.transactionCount')}</th>
-                  <th>Actions</th>
+                  <td>${u.fileName}</td>
+                  <td>
+                    ${u.status === 'processing' ? '⏳ Processing' :
+                      u.status === 'completed' ? '✓ Done' :
+                      u.status === 'failed' ? '✗ Failed: ' + u.error : u.status}
+                  </td>
+                  <td>${u.transactionCount || '-'}</td>
+                  <td>
+                    ${u.status === 'completed' && u.transactions ?
+                      `<button onclick="previewUpload('${u.id}')">Preview</button>` : '-'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                ${state.uploads.map(upload => `
-                  <tr>
-                    <td>${upload.fileName}</td>
-                    <td>${upload.fileType}</td>
-                    <td><span class="category-badge">${upload.status}</span></td>
-                    <td>${upload.transactionCount || '-'}</td>
-                    <td>${upload.status === 'completed' ? `<button class="action-btn" onclick="previewUpload('${upload.id}')">${t('upload.preview')}</button>` : '<span class="loading-spinner"></span>'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
       ` : ''}
     </div>
   `;
 }
+
+
 
 function renderReports() {
   const totalIncome = state.transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
@@ -693,96 +707,330 @@ function handleDrop(event) {
   }
 }
 
-async function handleFileSelect(event) {
+// ===== SIMPLE VERSION THAT WORKS =====
+function handleFileSelect(event) {
+  console.log('1️⃣ FILE SELECT TRIGGERED');
+  
   const files = event.target.files;
-  if (!files || files.length === 0) return;
-
-  const file = files[0];
-  if (!file || !file.name) return;
-
-  // Detect file type
-  let fileType = 'Unknown';
-  if (file.type) {
-    if (file.type.includes('pdf')) fileType = 'PDF';
-    else if (file.type.includes('sheet') || file.type.includes('excel')) fileType = 'Excel';
-    else if (file.type.includes('csv')) fileType = 'CSV';
-  } else {
-    const fileName = file.name.toLowerCase();
-    if (fileName.endsWith('.pdf')) fileType = 'PDF';
-    else if (fileName.endsWith('.csv')) fileType = 'CSV';
-    else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) fileType = 'Excel';
+  console.log('2️⃣ Files:', files.length);
+  
+  if (!files || files.length === 0) {
+    console.log('❌ No file selected');
+    return;
   }
 
-  // Create upload object
+  const file = files;
+  console.log('3️⃣ File:', file.name, file.size, 'bytes');
+
+  // Create upload record
+  const upload = {
+    id: 'upl_' + Date.now(),
+    fileName: file.name,
+    fileType: file.name.split('.').pop().toUpperCase(),
+    status: 'processing',
+    transactionCount: null,
+    createdAt: new Date().toLocaleDateString(),
+    transactions: null,
+    analysis: null,
+    summary: null,
+    error: null
+  };
+
+  console.log('4️⃣ Upload object created');
+  state.uploads.push(upload);
+  render();
+  console.log('5️⃣ UI rendered');
+
+  // Send to backend
+  uploadFile(file, upload.id);
+}
+
+// ===== SEPARATE UPLOAD FUNCTION =====
+function handleFileSelect(event) {
+  console.log('File select triggered');
+  console.log('Event:', event);
+  
+  if (!event || !event.target) {
+    console.error('Invalid event');
+    return;
+  }
+
+  const files = event.target.files;
+  console.log('Files:', files);
+  
+  if (!files || files.length === 0) {
+    console.error('No file selected');
+    return;
+  }
+
+  const file = files[0];
+  console.log('File object:', file);
+  
+  // SAFE: Check if file exists
+  if (!file) {
+    console.error('File is null');
+    return;
+  }
+
+  // SAFE: Check if name exists
+  if (!file.name) {
+    console.error('File has no name property');
+    return;
+  }
+
+  console.log('File name:', file.name);
+
+  // Get file type safely
+  let fileType = 'Unknown';
+  try {
+    const parts = file.name.split('.');
+    fileType = parts[parts.length - 1].toUpperCase();
+  } catch (e) {
+    fileType = 'Unknown';
+  }
+
   const upload = {
     id: 'upl_' + Date.now(),
     fileName: file.name,
     fileType: fileType,
-    fileSize: (file.size / 1024 / 1024).toFixed(2) + ' MB',
     status: 'processing',
     transactionCount: null,
-    createdAt: new Date().toLocaleDateString()
+    transactions: null,
+    analysis: null,
+    summary: null,
+    error: null
   };
 
-  console.log('📤 Uploading file:', upload.fileName);
+  console.log('Upload created:', upload);
+  
   state.uploads.push(upload);
   render();
 
-  // ===== SEND TO REAL BACKEND =====
+  // Call upload
+  uploadFile(file, upload.id);
+}
+
+
+async function uploadFile(file, uploadId) {
+  console.log('Upload starting');
+  console.log('File:', file);
+  console.log('UploadId:', uploadId);
+
+  // SAFE: Verify file and uploadId exist
+  if (!file) {
+    console.error('File is undefined');
+    alert('Error: File is undefined');
+    return;
+  }
+
+  if (!uploadId) {
+    console.error('UploadId is undefined');
+    alert('Error: UploadId is undefined');
+    return;
+  }
+
   try {
     const formData = new FormData();
     formData.append('file', file);
 
-    console.log('📡 Sending to backend...');
+    console.log('Sending to backend...');
 
-    // Send file to backend
     const response = await fetch('http://localhost:5001/api/files/upload', {
       method: 'POST',
       body: formData
     });
 
+    console.log('Response status:', response.status);
+
     const data = await response.json();
+    console.log('Response data:', data);
+
+    // Find upload
+    const idx = state.uploads.findIndex(u => u.id === uploadId);
+    
+    if (idx === -1) {
+      console.error('Upload not found in state');
+      alert('Error: Upload not found');
+      return;
+    }
+
+    if (!response.ok) {
+      state.uploads[idx].status = 'failed';
+      state.uploads[idx].error = data.error || 'Unknown error';
+      render();
+      alert('Failed: ' + data.error);
+      return;
+    }
 
     if (data.success && data.transactions) {
-      // ===== UPDATE STATE WITH REAL DATA =====
+      state.uploads[idx].status = 'completed';
+      state.uploads[idx].transactionCount = data.transactionCount;
+      state.uploads[idx].transactions = data.transactions;
+      state.uploads[idx].analysis = data.analysis;
+      state.uploads[idx].summary = data.summary;
       
-      // Update upload status
-      const uploadIndex = state.uploads.findIndex(u => u.id === upload.id);
-      if (uploadIndex !== -1) {
-        state.uploads[uploadIndex].status = 'completed';
-        state.uploads[uploadIndex].transactionCount = data.transactionCount;
-      }
-
-      // ADD REAL TRANSACTIONS (NOT DUMMY DATA!)
       state.transactions.push(...data.transactions);
-
-      console.log(`✅ ${data.transactionCount} transactions added from Claude AI`);
       render();
-
-      alert(`✅ Success!\n${data.transactionCount} transactions categorized by Claude AI`);
-
+      alert('✅ Success: ' + data.transactionCount + ' transactions');
     } else {
-      throw new Error(data.error || 'Upload failed');
+      state.uploads[idx].status = 'failed';
+      state.uploads[idx].error = 'Invalid response';
+      render();
+      alert('Invalid response from server');
     }
 
   } catch (error) {
-    console.error('❌ Error:', error);
-    alert(`❌ Upload failed: ${error.message}`);
-
-    const uploadIndex = state.uploads.findIndex(u => u.id === upload.id);
-    if (uploadIndex !== -1) {
-      state.uploads[uploadIndex].status = 'failed';
+    console.error('Upload error:', error);
+    
+    const idx = state.uploads.findIndex(u => u.id === uploadId);
+    if (idx !== -1) {
+      state.uploads[idx].status = 'failed';
+      state.uploads[idx].error = error.message;
+      render();
     }
-    render();
+    
+    alert('Error: ' + error.message);
   }
 }
 
 
 
 
+
+
 function previewUpload(uploadId) {
-  alert('Upload preview - would show transactions from this file');
+  const upload = state.uploads.find(u => u.id === uploadId);
+  
+  if (!upload) {
+    alert('Upload not found');
+    return;
+  }
+
+  if (!upload.transactions || upload.transactions.length === 0) {
+    alert('No transactions to preview');
+    return;
+  }
+
+  // Create modal
+  const modal = document.createElement('div');
+  modal.className = 'modal show';
+  modal.id = 'previewModal';
+  
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 900px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div>
+          <h2 style="margin: 0; font-weight: 300;">Upload Preview</h2>
+          <p style="margin: 5px 0 0 0; color: var(--text-secondary); font-size: 12px;">
+            File: ${upload.fileName} | Transactions: ${upload.transactionCount}
+          </p>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('previewModal').remove()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- File Info -->
+        <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 10px;">
+            <div>
+              <span style="color: var(--text-secondary); font-size: 11px;">File Name</span>
+              <p style="margin: 5px 0 0 0; font-weight: 300;">${upload.fileName}</p>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary); font-size: 11px;">File Type</span>
+              <p style="margin: 5px 0 0 0; font-weight: 300;">${upload.fileType}</p>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary); font-size: 11px;">Transactions Found</span>
+              <p style="margin: 5px 0 0 0; font-weight: 300; color: var(--accent-green);">${upload.transactionCount}</p>
+            </div>
+          </div>
+          
+          ${upload.analysis ? `
+            <div>
+              <span style="color: var(--text-secondary); font-size: 11px;">Analysis</span>
+              <p style="margin: 5px 0 0 0; font-weight: 300; font-size: 13px;">${upload.analysis}</p>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Summary Stats -->
+        ${upload.summary ? `
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+            <div style="background: var(--bg-hover); padding: 10px; border-radius: 6px;">
+              <span style="color: var(--text-secondary); font-size: 10px;">Total Transactions</span>
+              <p style="margin: 5px 0 0 0; font-size: 18px; color: var(--text-primary);">${upload.summary.totalTransactions}</p>
+            </div>
+            <div style="background: var(--bg-hover); padding: 10px; border-radius: 6px;">
+              <span style="color: var(--text-secondary); font-size: 10px;">Credit Total</span>
+              <p style="margin: 5px 0 0 0; font-size: 18px; color: var(--accent-green);">€${upload.summary.creditTotal?.toFixed(2) || 0}</p>
+            </div>
+            <div style="background: var(--bg-hover); padding: 10px; border-radius: 6px;">
+              <span style="color: var(--text-secondary); font-size: 10px;">Debit Total</span>
+              <p style="margin: 5px 0 0 0; font-size: 18px; color: var(--accent-red);">€${upload.summary.debitTotal?.toFixed(2) || 0}</p>
+            </div>
+            <div style="background: var(--bg-hover); padding: 10px; border-radius: 6px;">
+              <span style="color: var(--text-secondary); font-size: 10px;">Net Cash Flow</span>
+              <p style="margin: 5px 0 0 0; font-size: 18px; color: ${upload.summary.netCashFlow >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'};">€${upload.summary.netCashFlow?.toFixed(2) || 0}</p>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Transactions Table -->
+        <div class="table-container">
+          <h3 style="margin: 0 0 15px 0; font-weight: 300; font-size: 13px; text-transform: uppercase;">Analyzed Transactions</h3>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Type</th>
+                  <th>Category</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${upload.transactions.map(txn => `
+                  <tr>
+                    <td>${txn.date}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${txn.description}</td>
+                    <td style="text-align: right;">€${txn.amount?.toFixed(2) || 0}</td>
+                    <td>
+                      <span class="${txn.type === 'CREDIT' ? 'type-credit' : 'type-debit'}">
+                        ${txn.type}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="category-badge">${txn.categoryCode}</span>
+                    </td>
+                    <td>
+                      <span class="confidence-badge">${(txn.confidence * 100).toFixed(0)}%</span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="document.getElementById('previewModal').remove()">Close</button>
+        <button class="btn-primary" onclick="importTransactions('${uploadId}')">Import to Dashboard</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
 }
+
+function importTransactions(uploadId) {
+  alert('Transactions already imported from this file!');
+  document.getElementById('previewModal')?.remove();
+}
+
 
 function sortTransactions(field) {
   // Add sorting logic
