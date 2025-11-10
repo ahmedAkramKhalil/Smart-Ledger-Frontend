@@ -13,7 +13,7 @@ const state = {
     category: null,
     type: 'all',
     amountMin: 0,
-    amountMax: 5000,
+    amountMax: 1000000,
     search: ''
   },
   currentTransactionPage: 1,
@@ -27,7 +27,7 @@ const translations = {
     common: { save: 'Save', cancel: 'Cancel', close: 'Close', delete: 'Delete', edit: 'Edit', logout: 'Logout', login: 'Login', loading: 'Loading...', error: 'Error', success: 'Success', language: 'EN / EL' },
     nav: { dashboard: 'Dashboard', transactions: 'Transactions', upload: 'Upload', reports: 'Reports', categories: 'Categories' },
     dashboard: { welcome: 'Welcome', totalBalance: 'Total Balance', totalIncome: 'Total Income (Month)', totalExpenses: 'Total Expenses (Month)', transactionCount: 'Transactions', recentTransactions: 'Recent Transactions' },
-    transactions: { date: 'Date', description: 'Description', amount: 'Amount', type: 'Type', category: 'Category', confidence: 'Confidence', actions: 'Actions', filter: 'Filter', search: 'Search...', from: 'From', to: 'To', amountRange: 'Amount Range', noResults: 'No transactions found', selectCategory: 'Select Category' },
+    transactions: { date: 'Date', description: 'Description', amount: 'Amount', type: 'Type', category: 'Category', confidence: 'Confidence', actions: 'Actions', filter: 'Filter', search: 'Search...', from: 'From', to: 'To', amountRange: 'Amount Range', noResults: 'No transactions found', selectCategory: 'Select Category', transaction: 'Transaction' },
     upload: { dragDrop: 'Drag and drop files here', selectFile: 'Select File', uploadBtn: 'Upload', recentUploads: 'Recent Uploads', status: 'Status', preview: 'Preview', processing: 'Processing with Claude AI...', fileName: 'File Name', fileType: 'Type', transactionCount: 'Transactions' },
     reports: { summary: 'Cash Flow Summary', monthlyIncome: 'Monthly Income', monthlyExpenses: 'Monthly Expenses', netCashFlow: 'Net Cash Flow', categoryBreakdown: 'Category Breakdown', exportCSV: 'Export to CSV', incomeVsExpenses: 'Income vs Expenses', transactionTrend: '30-Day Trend' },
     categories: { categoryName: 'Category Name', transactions: 'Transactions', avgAmount: 'Avg Amount', lastUsed: 'Last Used' }
@@ -36,7 +36,7 @@ const translations = {
     common: { save: 'Αποθήκευση', cancel: 'Ακύρωση', close: 'Κλείσιμο', delete: 'Διώχνω', edit: 'Επεξεργασία', logout: 'Αποσύνδεση', login: 'Σύνδεση', loading: 'Φόρτωση...', error: 'Σφάλμα', success: 'Επιτυχία', language: 'EN / EL' },
     nav: { dashboard: 'Πίνακας Ελέγχου', transactions: 'Συναλλαγές', upload: 'Ανέβασμα', reports: 'Αναφορές', categories: 'Κατηγορίες' },
     dashboard: { welcome: 'Καλώς ήρθατε', totalBalance: 'Συνολό Υπόλοιπο', totalIncome: 'Συνολό Εισόδημα (Μήνας)', totalExpenses: 'Συνολά Έξοδα (Μήνας)', transactionCount: 'Συναλλαγές', recentTransactions: 'Πρόσφατες Συναλλαγές' },
-    transactions: { date: 'Ημερομηνία', description: 'Περιγραφή', amount: 'Ποσό', type: 'Τύπος', category: 'Κατηγορία', confidence: 'Εμπιστοσύνη', actions: 'Ενέργειες', filter: 'Φίλτρο', search: 'Αναζήτηση...', from: 'Από', to: 'Έως', amountRange: 'Εύρος Ποσού', noResults: 'Δεν βρέθηκαν συναλλαγές', selectCategory: 'Επιλέξτε Κατηγορία' },
+    transactions: { date: 'Ημερομηνία', description: 'Περιγραφή', amount: 'Ποσό', type: 'Τύπος', category: 'Κατηγορία', confidence: 'Εμπιστοσύνη', actions: 'Ενέργειες', filter: 'Φίλτρο', search: 'Αναζήτηση...', from: 'Από', to: 'Έως', amountRange: 'Εύρος Ποσού', noResults: 'Δεν βρέθηκαν συναλλαγές', selectCategory: 'Επιλέξτε Κατηγορία', transaction: 'Συναλλαγή' },
     upload: { dragDrop: 'Σύρετε και αποθέστε αρχεία εδώ', selectFile: 'Επιλέξτε Αρχείο', uploadBtn: 'Ανέβασμα', recentUploads: 'Πρόσφατα Αναβάσματα', status: 'Κατάσταση', preview: 'Προεπισκόπηση', processing: 'Επεξεργασία με Claude AI...', fileName: 'Όνομα Αρχείου', fileType: 'Τύπος', transactionCount: 'Συναλλαγές' },
     reports: { summary: 'Περίληψη Ταμειακής Ροής', monthlyIncome: 'Μηνιαίο Εισόδημα', monthlyExpenses: 'Μηνιαία Έξοδα', netCashFlow: 'Καθαρή Ταμειακή Ροή', categoryBreakdown: 'Ανάλυση Κατηγοριών', exportCSV: 'Εξαγωγή σε CSV', incomeVsExpenses: 'Εισόδημα vs Έξοδα', transactionTrend: 'Τάση 30 Ημερών' },
     categories: { categoryName: 'Όνομα Κατηγορίας', transactions: 'Συναλλαγές', avgAmount: 'Μέσο Ποσό', lastUsed: 'Τελευταία Χρήση' }
@@ -69,32 +69,6 @@ const categories = {
   ]
 };
 
-const mockTransactions = [];
-state.transactions = mockTransactions;
-
-
-// Mock Transactions (50+)
-// const mockTransactions = [
-//   { id: 'txn_001', date: '2025-11-08', description: 'ΑΒΑΖΗΣ ΑΕ - ΕΞΟΦΛΗΣΗ ΤΙΜ/ΓΙΟ', amount: 2500, type: 'CREDIT', category: 'INVOICE_PAYMENT_FULL', confidence: 0.98, counterparty: 'ΑΒΑΖΗΣ ΑΕ' },
-//   { id: 'txn_002', date: '2025-11-07', description: 'ΓΡΑΦΕΙΟΥ ΑΕ - ΠΡΟΜΗΘΕΙΑ', amount: 450, type: 'DEBIT', category: 'SUPPLIER_PAYMENT', confidence: 0.95, counterparty: 'ΓΡΑΦΕΙΟΥ ΑΕ' },
-//   { id: 'txn_003', date: '2025-11-06', description: 'ΕΝΟΙΚΙΟ ΓΡΑΦΕΙΩΝ ΝΟΕΜΒΡΙΟΣ', amount: 1200, type: 'DEBIT', category: 'RENT', confidence: 0.99, counterparty: 'ΙΔΙΟΚΤΗΤΗΣ' },
-//   { id: 'txn_004', date: '2025-11-05', description: 'ΔΕΗ - ΧΡΕΩΣΗ ΡΕΥΜΑΤΟΣ', amount: 285, type: 'DEBIT', category: 'UTILITIES', confidence: 0.97, counterparty: 'ΔΕΗ ΑΕ' },
-//   { id: 'txn_005', date: '2025-11-04', description: 'ΜΙΣΘΟΔΟΣΙΑ - 5 ΕΡΓΑΖΟΜΕΝΟΙ', amount: 8500, type: 'DEBIT', category: 'PAYROLL', confidence: 0.99, counterparty: 'ΕΡΓΑΖΟΜΕΝΟΙ' },
-//   { id: 'txn_006', date: '2025-11-03', description: 'ΔΑΝΕΙΟ ALPHA BANK - ΑΠΟΠΛΗΡΩΜΗ', amount: 3000, type: 'DEBIT', category: 'LOAN_REPAYMENT', confidence: 0.98, counterparty: 'ALPHA BANK' },
-//   { id: 'txn_007', date: '2025-11-02', description: 'ΕΤΑΙΡΙΑ Χ - ΕΞΟΦΛΗΣΗ ΤΙΜ/ΓΙΟ', amount: 1850, type: 'CREDIT', category: 'INVOICE_PAYMENT_FULL', confidence: 0.96, counterparty: 'ΕΤΑΙΡΙΑ Χ' },
-//   { id: 'txn_008', date: '2025-11-01', description: 'ΤΡΑΠΕΖΙΚΑ ΕΞΟΔΑ ΟΚΤΩΒΡΙΟΣ', amount: 125, type: 'DEBIT', category: 'BANK_FEES', confidence: 0.99, counterparty: 'ALPHA BANK' },
-//   { id: 'txn_009', date: '2025-10-31', description: 'ΦΟΡΟΣ ΕΙΣΟΔΗΜΑΤΟΣ', amount: 2200, type: 'DEBIT', category: 'TAX_PAYMENT', confidence: 0.94, counterparty: 'ΔΟΥ' },
-//   { id: 'txn_010', date: '2025-10-30', description: 'ΠΥΡΓΟΣ ΙΚΕ - ΑΝΑΛΩΣΙΜΑ', amount: 625, type: 'DEBIT', category: 'SUPPLIER_PAYMENT', confidence: 0.92, counterparty: 'ΠΥΡΓΟΣ ΙΚΕ' },
-//   { id: 'txn_011', date: '2025-10-29', description: 'ΧΡΗΜΑΤΟΔΟΤΗΣΗ ΠΡΟΓΡΑΜΜΑΤΟΣ', amount: 15000, type: 'CREDIT', category: 'CAPITAL_RAISE', confidence: 0.88, counterparty: 'ΤΑΜΕΙΟ' },
-//   { id: 'txn_012', date: '2025-10-28', description: 'ΔΑΦΝΗΣ ΑΕ - ΠΡΟΜΗΘΕΙΑ ΠΡΟΪΟΝΤΩΝ', amount: 3200, type: 'DEBIT', category: 'SUPPLIER_PAYMENT', confidence: 0.95, counterparty: 'ΔΑΦΝΗΣ ΑΕ' },
-//   { id: 'txn_013', date: '2025-10-27', description: 'ΔΙΑΧΕΙΡΙΣΗΣ ΛΟΓΑΡΙΑΣΜΟΥ', amount: 385, type: 'DEBIT', category: 'ADMIN_EXPENSES', confidence: 0.85, counterparty: 'ΕΞΟΔΑ' },
-//   { id: 'txn_014', date: '2025-10-26', description: 'ΜΥΚΟΝΟΣ ΟΕ - ΕΞΟΦΛΗΣΗ', amount: 4750, type: 'CREDIT', category: 'INVOICE_PAYMENT_FULL', confidence: 0.99, counterparty: 'ΜΥΚΟΝΟΣ ΟΕ' },
-//   { id: 'txn_015', date: '2025-10-25', description: 'ΑΝΑΛΗΨΗ ΜΕΤΡΗΤΩΝ', amount: 1500, type: 'DEBIT', category: 'ATM_WITHDRAWAL', confidence: 0.98, counterparty: 'ΤΑΜΕΙΟ' }
-// ];
-
-// Initialize State with Mock Data
-// state.transactions = mockTransactions;
-
 // Utility Functions
 function t(path) {
   const keys = path.split('.');
@@ -118,15 +92,83 @@ function formatDate(dateString) {
 }
 
 function getCategoryName(code) {
+  // Handle undefined or null
+  if (!code || code === 'undefined' || code === 'null') {
+    return state.language === 'el' ? 'Μη Κατηγοριοποιημένο' : 'Uncategorized';
+  }
+  
   const allCats = [...categories.credit, ...categories.debit];
   const cat = allCats.find(c => c.code === code);
-  return cat ? (state.language === 'el' ? cat.name_el : cat.name_en) : code;
+  
+  if (cat) {
+    return state.language === 'el' ? cat.name_el : cat.name_en;
+  }
+  
+  // If category not found, return the code itself
+  console.warn('Category not found:', code);
+  return code;
 }
+
 
 function getCategoryIcon(code) {
   const allCats = [...categories.credit, ...categories.debit];
   const cat = allCats.find(c => c.code === code);
   return cat ? cat.icon : 'mdi-help-circle';
+}
+
+// ========================================
+// FIX 1: Load transactions from backend
+// ========================================
+async function loadTransactionsFromDB() {
+  try {
+    console.log('📊 Loading transactions from database...');
+    const response = await fetch('http://localhost:5001/api/transactions?limit=1000');
+    
+    if (!response.ok) {
+      console.error('Failed to load transactions:', response.status);
+      return;
+    }
+    
+    const transactions = await response.json();
+    console.log('✅ Loaded', transactions.length, 'transactions from database');
+    
+    // Map database fields to frontend format
+    state.transactions = transactions.map(txn => ({
+      id: txn.id,
+      date: txn.date,
+      description: txn.description,
+      amount: txn.amount,
+      type: txn.type,
+      category: txn.categoryCode, // ← FIX: Use categoryCode
+      categoryCode: txn.categoryCode,
+      confidence: txn.confidence,
+      counterparty: txn.counterparty || '',
+      reasoning: txn.reasoning || ''
+    }));
+    
+    console.log('✅ State updated with', state.transactions.length, 'transactions');
+    render();
+    
+  } catch (error) {
+    console.error('❌ Error loading transactions:', error);
+  }
+}
+
+// ========================================
+// FIX 2: Check session on page load
+// ========================================
+function checkSession() {
+  const isLoggedIn = localStorage.getItem('isLoggedIn');
+  const userJson = localStorage.getItem('currentUser');
+  
+  if (isLoggedIn === 'true' && userJson) {
+    state.isLoggedIn = true;
+    state.currentUser = JSON.parse(userJson);
+    state.currentPage = 'dashboard';
+    
+    // Load transactions immediately
+    loadTransactionsFromDB();
+  }
 }
 
 // Render Functions
@@ -294,13 +336,13 @@ function renderDashboard() {
               </tr>
             </thead>
             <tbody>
-              ${recentTxn.map(txn => `
+              ${recentTxn.length === 0 ? `<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-secondary);">No transactions yet. Upload a file to get started!</td></tr>` : recentTxn.map(txn => `
                 <tr>
                   <td>${formatDate(txn.date)}</td>
                   <td>${txn.description}</td>
                   <td>${formatCurrency(txn.amount)}</td>
                   <td><span class="type-${txn.type.toLowerCase()}">${txn.type}</span></td>
-                  <td><span class="category-badge">${getCategoryName(txn.category)}</span></td>
+                  <td><span class="category-badge">${getCategoryName(txn.categoryCode || txn.category)}</span></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -358,9 +400,10 @@ function renderTransactions() {
         </div>
         <div class="filter-group">
           <label class="filter-label">${t('transactions.amountRange')}</label>
-          <input type="range" class="filter-input" id="filterAmount" min="0" max="5000" onchange="updateFilters()" style="width: 150px;">
-        </div>
-      </div>
+          <input type="number" class="filter-input" id="filterAmountMin" placeholder="Min" value="0" onchange="updateFilters()" style="width: 100px;">
+          <input type="number" class="filter-input" id="filterAmountMax" placeholder="Max" value="1000000" onchange="updateFilters()" style="width: 100px;">
+        </div>    
+    </div>
 
       <div class="table-container">
         <div class="table-wrapper">
@@ -383,7 +426,7 @@ function renderTransactions() {
                   <td>${txn.description}</td>
                   <td>${formatCurrency(txn.amount)}</td>
                   <td><span class="type-${txn.type.toLowerCase()}">${txn.type}</span></td>
-                  <td><span class="category-badge">${getCategoryName(txn.category)}</span></td>
+                  <td><span class="category-badge">${getCategoryName(txn.categoryCode || txn.category)}</span></td>
                   <td><span class="confidence-badge">${(txn.confidence * 100).toFixed(0)}%</span></td>
                   <td><button class="action-btn" onclick="editTransaction('${txn.id}')">${t('common.edit')}</button></td>
                 </tr>
@@ -421,7 +464,6 @@ function renderUpload() {
           <div>Click to select file</div>
         </div>
 
-        <!-- IMPORTANT: File input must be here -->
         <input type="file" 
                id="fileInput" 
                style="display: none;" 
@@ -429,7 +471,6 @@ function renderUpload() {
                onchange="handleFileSelect(event)">
       </div>
 
-      <!-- Upload history table -->
       ${state.uploads.length > 0 ? `
         <div class="card">
           <table style="width: 100%; border-collapse: collapse;">
@@ -465,20 +506,25 @@ function renderUpload() {
   `;
 }
 
-
-
 function renderReports() {
   const totalIncome = state.transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
   const totalExpenses = state.transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
   const categoryBreakdown = {};
   
   state.transactions.forEach(txn => {
-    if (!categoryBreakdown[txn.category]) {
-      categoryBreakdown[txn.category] = { count: 0, total: 0 };
+    const catCode = txn.categoryCode || txn.category || 'UNCATEGORIZED';
+    
+    if (!categoryBreakdown[catCode]) {
+      categoryBreakdown[catCode] = { count: 0, total: 0 };
     }
-    categoryBreakdown[txn.category].count++;
-    categoryBreakdown[txn.category].total += txn.amount;
+    
+    categoryBreakdown[catCode].count++;
+    categoryBreakdown[catCode].total += txn.amount;
   });
+  
+  // Log for debugging
+  console.log('Category Breakdown:', categoryBreakdown);
+  console.log('Total categories:', Object.keys(categoryBreakdown).length);
 
   return `
     <div>
@@ -508,10 +554,23 @@ function renderReports() {
           <table>
             <thead>
               <tr>
-                <th>${t('categories.categoryName')}</th>
-                <th>${t('categories.transactions')}</th>
-                <th>${t('categories.avgAmount')}</th>
-                <th>Total</th>
+                <tbody>
+                  ${Object.entries(categoryBreakdown).length === 0 ? `
+                    <tr>
+                      <td colspan="4" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                        No category data available
+                      </td>
+                    </tr>
+                  ` : Object.entries(categoryBreakdown).map(([code, data]) => `
+                    <tr>
+                      <td>${getCategoryName(code)}</td>
+                      <td>${data.count}</td>
+                      <td>${formatCurrency(data.total / data.count)}</td>
+                      <td>${formatCurrency(data.total)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+               
               </tr>
             </thead>
             <tbody>
@@ -580,6 +639,14 @@ function attachLoginEvents() {
       state.isLoggedIn = true;
       state.currentUser = { id: 'usr_001', email: email, fullName: 'Dimitris Papadopoulos', company: 'Demo Company LLC' };
       state.currentPage = 'dashboard';
+      
+      // Save to localStorage
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+      
+      // Load transactions
+      loadTransactionsFromDB();
+      
       render();
     } else {
       document.getElementById('loginError').textContent = 'Invalid credentials';
@@ -606,26 +673,52 @@ function logout() {
   state.isLoggedIn = false;
   state.currentUser = null;
   state.currentPage = 'login';
+  state.transactions = [];
+  
+  // Clear localStorage
+  localStorage.removeItem('isLoggedIn');
+  localStorage.removeItem('currentUser');
+  
   render();
 }
 
 function filterTransactions() {
   return state.transactions.filter(txn => {
-    const matchesDate = true; // Add date filtering logic
-    const matchesCategory = !state.filters.category || txn.category === state.filters.category;
-    const matchesType = state.filters.type === 'all' || txn.type === state.filters.type;
-    const matchesAmount = txn.amount >= state.filters.amountMin && txn.amount <= state.filters.amountMax;
-    const matchesSearch = !state.filters.search || txn.description.toLowerCase().includes(state.filters.search.toLowerCase()) || txn.counterparty.toLowerCase().includes(state.filters.search.toLowerCase());
+    const matchesDate = true;
+    
+    const matchesCategory = !state.filters.category || 
+                           txn.categoryCode === state.filters.category || 
+                           txn.category === state.filters.category;
+    
+    const matchesType = state.filters.type === 'all' || 
+                       txn.type === state.filters.type;
+    
+    // Make amount filter optional - only apply if explicitly set
+    const matchesAmount = (state.filters.amountMax === 5000 && state.filters.amountMin === 0) ||
+                         (Math.abs(txn.amount) >= state.filters.amountMin && 
+                          Math.abs(txn.amount) <= state.filters.amountMax);
+    
+    const matchesSearch = !state.filters.search || 
+      txn.description.toLowerCase().includes(state.filters.search.toLowerCase()) || 
+      (txn.counterparty && txn.counterparty.toLowerCase().includes(state.filters.search.toLowerCase()));
     
     return matchesDate && matchesCategory && matchesType && matchesAmount && matchesSearch;
   });
 }
 
+
 function updateFilters() {
   state.filters.category = document.getElementById('filterCategory')?.value || null;
   state.filters.type = document.getElementById('filterType')?.value || 'all';
   state.filters.search = document.getElementById('filterSearch')?.value || '';
-  state.filters.amountMax = document.getElementById('filterAmount')?.value || 5000;
+  
+  // Update amount filters
+  const amountMin = document.getElementById('filterAmountMin')?.value;
+  const amountMax = document.getElementById('filterAmountMax')?.value;
+  
+  state.filters.amountMin = amountMin ? parseFloat(amountMin) : 0;
+  state.filters.amountMax = amountMax ? parseFloat(amountMax) : 1000000;
+  
   state.currentTransactionPage = 1;
   render();
 }
@@ -635,7 +728,7 @@ function editTransaction(id) {
   if (!txn) return;
 
   const categoryOptions = [...categories.credit, ...categories.debit].map(cat => `
-    <option value="${cat.code}" ${txn.category === cat.code ? 'selected' : ''}>${state.language === 'el' ? cat.name_el : cat.name_en}</option>
+    <option value="${cat.code}" ${(txn.categoryCode || txn.category) === cat.code ? 'selected' : ''}>${state.language === 'el' ? cat.name_el : cat.name_en}</option>
   `).join('');
 
   const modal = document.createElement('div');
@@ -679,108 +772,35 @@ function editTransaction(id) {
 function saveTransaction(id, modalId) {
   const txn = state.transactions.find(t => t.id === id);
   if (txn) {
-    txn.category = document.getElementById('editCategory').value;
+    txn.categoryCode = document.getElementById('editCategory').value;
+    txn.category = txn.categoryCode;
   }
   document.getElementById(modalId).remove();
   render();
 }
 
-function handleDragOver(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  document.getElementById('uploadArea').classList.add('dragover');
-}
-
-function handleDragLeave(event) {
-  event.preventDefault();
-  document.getElementById('uploadArea').classList.remove('dragover');
-}
-
-function handleDrop(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  document.getElementById('uploadArea').classList.remove('dragover');
-  
-  const files = event.dataTransfer.files;
-  if (files.length > 0) {
-    handleFileSelect({ target: { files } });
-  }
-}
-
-// ===== SIMPLE VERSION THAT WORKS =====
-function handleFileSelect(event) {
-  console.log('1️⃣ FILE SELECT TRIGGERED');
-  
-  const files = event.target.files;
-  console.log('2️⃣ Files:', files.length);
-  
-  if (!files || files.length === 0) {
-    console.log('❌ No file selected');
-    return;
-  }
-
-  const file = files;
-  console.log('3️⃣ File:', file.name, file.size, 'bytes');
-
-  // Create upload record
-  const upload = {
-    id: 'upl_' + Date.now(),
-    fileName: file.name,
-    fileType: file.name.split('.').pop().toUpperCase(),
-    status: 'processing',
-    transactionCount: null,
-    createdAt: new Date().toLocaleDateString(),
-    transactions: null,
-    analysis: null,
-    summary: null,
-    error: null
-  };
-
-  console.log('4️⃣ Upload object created');
-  state.uploads.push(upload);
-  render();
-  console.log('5️⃣ UI rendered');
-
-  // Send to backend
-  uploadFile(file, upload.id);
-}
-
-// ===== SEPARATE UPLOAD FUNCTION =====
 function handleFileSelect(event) {
   console.log('File select triggered');
-  console.log('Event:', event);
   
-  if (!event || !event.target) {
+  if (!event || !event.target || !event.target.files) {
     console.error('Invalid event');
     return;
   }
 
   const files = event.target.files;
-  console.log('Files:', files);
-  
-  if (!files || files.length === 0) {
+  if (files.length === 0) {
     console.error('No file selected');
     return;
   }
 
   const file = files[0];
-  console.log('File object:', file);
-  
-  // SAFE: Check if file exists
-  if (!file) {
-    console.error('File is null');
+  if (!file || !file.name) {
+    console.error('Invalid file');
     return;
   }
 
-  // SAFE: Check if name exists
-  if (!file.name) {
-    console.error('File has no name property');
-    return;
-  }
+  console.log('File:', file.name);
 
-  console.log('File name:', file.name);
-
-  // Get file type safely
   let fileType = 'Unknown';
   try {
     const parts = file.name.split('.');
@@ -801,31 +821,17 @@ function handleFileSelect(event) {
     error: null
   };
 
-  console.log('Upload created:', upload);
-  
   state.uploads.push(upload);
   render();
 
-  // Call upload
   uploadFile(file, upload.id);
 }
 
-
 async function uploadFile(file, uploadId) {
   console.log('Upload starting');
-  console.log('File:', file);
-  console.log('UploadId:', uploadId);
 
-  // SAFE: Verify file and uploadId exist
-  if (!file) {
-    console.error('File is undefined');
-    alert('Error: File is undefined');
-    return;
-  }
-
-  if (!uploadId) {
-    console.error('UploadId is undefined');
-    alert('Error: UploadId is undefined');
+  if (!file || !uploadId) {
+    console.error('Invalid parameters');
     return;
   }
 
@@ -845,11 +851,10 @@ async function uploadFile(file, uploadId) {
     const data = await response.json();
     console.log('Response data:', data);
 
-    // Find upload
     const idx = state.uploads.findIndex(u => u.id === uploadId);
     
     if (idx === -1) {
-      console.error('Upload not found in state');
+      console.error('Upload not found');
       alert('Error: Upload not found');
       return;
     }
@@ -869,9 +874,23 @@ async function uploadFile(file, uploadId) {
       state.uploads[idx].analysis = data.analysis;
       state.uploads[idx].summary = data.summary;
       
-      state.transactions.push(...data.transactions);
+      // Map transactions correctly
+      const mappedTransactions = data.transactions.map(txn => ({
+        id: txn.id,
+        date: txn.date,
+        description: txn.description,
+        amount: txn.amount,
+        type: txn.type,
+        category: txn.categoryCode,
+        categoryCode: txn.categoryCode,
+        confidence: txn.confidence,
+        counterparty: txn.counterparty || '',
+        reasoning: txn.reasoning || ''
+      }));
+      
+      state.transactions.push(...mappedTransactions);
       render();
-      alert('✅ Success: ' + data.transactionCount + ' transactions');
+      alert('✅ Success: ' + data.transactionCount + ' transactions imported');
     } else {
       state.uploads[idx].status = 'failed';
       state.uploads[idx].error = 'Invalid response';
@@ -893,25 +912,14 @@ async function uploadFile(file, uploadId) {
   }
 }
 
-
-
-
-
-
 function previewUpload(uploadId) {
   const upload = state.uploads.find(u => u.id === uploadId);
   
-  if (!upload) {
-    alert('Upload not found');
-    return;
-  }
-
-  if (!upload.transactions || upload.transactions.length === 0) {
+  if (!upload || !upload.transactions || upload.transactions.length === 0) {
     alert('No transactions to preview');
     return;
   }
 
-  // Create modal
   const modal = document.createElement('div');
   modal.className = 'modal show';
   modal.id = 'previewModal';
@@ -929,7 +937,6 @@ function previewUpload(uploadId) {
       </div>
 
       <div class="modal-body">
-        <!-- File Info -->
         <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 10px;">
             <div>
@@ -954,7 +961,6 @@ function previewUpload(uploadId) {
           ` : ''}
         </div>
 
-        <!-- Summary Stats -->
         ${upload.summary ? `
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
             <div style="background: var(--bg-hover); padding: 10px; border-radius: 6px;">
@@ -976,7 +982,6 @@ function previewUpload(uploadId) {
           </div>
         ` : ''}
 
-        <!-- Transactions Table -->
         <div class="table-container">
           <h3 style="margin: 0 0 15px 0; font-weight: 300; font-size: 13px; text-transform: uppercase;">Analyzed Transactions</h3>
           <div class="table-wrapper">
@@ -1003,7 +1008,7 @@ function previewUpload(uploadId) {
                       </span>
                     </td>
                     <td>
-                      <span class="category-badge">${txn.categoryCode}</span>
+                      <span class="category-badge">${getCategoryName(txn.categoryCode)}</span>
                     </td>
                     <td>
                       <span class="confidence-badge">${(txn.confidence * 100).toFixed(0)}%</span>
@@ -1030,7 +1035,6 @@ function importTransactions(uploadId) {
   alert('Transactions already imported from this file!');
   document.getElementById('previewModal')?.remove();
 }
-
 
 function sortTransactions(field) {
   // Add sorting logic
@@ -1059,7 +1063,7 @@ function exportToCSV() {
     t.description,
     t.amount,
     t.type,
-    getCategoryName(t.category),
+    getCategoryName(t.categoryCode || t.category),
     (t.confidence * 100).toFixed(0) + '%',
     t.counterparty
   ]);
@@ -1073,6 +1077,8 @@ function exportToCSV() {
   a.click();
 }
 
-// Initialize
+// ========================================
+// FIX 3: Initialize on page load
+// ========================================
+checkSession();
 render();
-
