@@ -1,12 +1,24 @@
-// State Management
+// ========================================
+// STATE MANAGEMENT - ENHANCED
+// ========================================
+
 const state = {
+  // Auth & User
   currentUser: null,
   isLoggedIn: false,
   currentPage: 'login',
   language: localStorage.getItem('language') || 'en',
+  
+  // Data Arrays
   transactions: [],
-  categories: {},
-  uploads: [],
+  accounts: [],
+  reports: {},
+  predictions: [],
+  ledger: [],
+  uploads: [],           // ← CRITICAL: Add this
+  categories: [],        // ← Add if missing
+  
+  // Filters
   filters: {
     dateFrom: null,
     dateTo: null,
@@ -14,62 +26,159 @@ const state = {
     type: 'all',
     amountMin: 0,
     amountMax: 1000000,
-    search: ''
+    search: '',
+    accountId: null
   },
+  
+  // UI State
   currentTransactionPage: 1,
   transactionsPerPage: 10,
-  editingTransaction: null
+  editingTransaction: null,
+  selectedAccount: 'acc_default_001'
 };
 
-// Translations
+// ========================================
+// API ENDPOINTS
+// ========================================
+
+const API_BASE = 'http://localhost:5001/api';
+
+const endpoints = {
+  // Reports
+  dashboard: `${API_BASE}/reports/dashboard`,
+  incomeExpenses: `${API_BASE}/reports/income-expenses`,
+  cashFlow: `${API_BASE}/reports/cash-flow`,
+  categoryAnalysis: `${API_BASE}/reports/category-analysis`,
+  topTransactions: `${API_BASE}/reports/top-transactions`,
+  reconciliation: `${API_BASE}/reports/reconciliation-status`,
+  monthlyComparison: `${API_BASE}/reports/monthly-comparison`,
+  
+  // Predictions
+  recurring: `${API_BASE}/reports/recurring`,
+  forecast: `${API_BASE}/reports/forecast/cash-flow`,
+  
+  // Accounts
+  accounts: `${API_BASE}/accounts`,
+  accountLedger: (id) => `${API_BASE}/accounts/${id}/ledger`,
+  accountSummary: (id) => `${API_BASE}/accounts/${id}/summary`,
+  accountBalance: (id) => `${API_BASE}/accounts/${id}/balance`,
+  
+  // Transactions
+  transactions: `${API_BASE}/transactions`,
+  upload: `${API_BASE}/files/upload`
+};
+
+// ========================================
+// TRANSLATIONS - ENHANCED
+// ========================================
+
 const translations = {
   en: {
-    common: { save: 'Save', cancel: 'Cancel', close: 'Close', delete: 'Delete', edit: 'Edit', logout: 'Logout', login: 'Login', loading: 'Loading...', error: 'Error', success: 'Success', language: 'EN / EL' },
-    nav: { dashboard: 'Dashboard', transactions: 'Transactions', upload: 'Upload', reports: 'Reports', categories: 'Categories' },
-    dashboard: { welcome: 'Welcome', totalBalance: 'Total Balance', totalIncome: 'Total Income (Month)', totalExpenses: 'Total Expenses (Month)', transactionCount: 'Transactions', recentTransactions: 'Recent Transactions' },
-    transactions: { date: 'Date', description: 'Description', amount: 'Amount', type: 'Type', category: 'Category', confidence: 'Confidence', actions: 'Actions', filter: 'Filter', search: 'Search...', from: 'From', to: 'To', amountRange: 'Amount Range', noResults: 'No transactions found', selectCategory: 'Select Category', transaction: 'Transaction' },
-    upload: { dragDrop: 'Drag and drop files here', selectFile: 'Select File', uploadBtn: 'Upload', recentUploads: 'Recent Uploads', status: 'Status', preview: 'Preview', processing: 'Processing with Claude AI...', fileName: 'File Name', fileType: 'Type', transactionCount: 'Transactions' },
-    reports: { summary: 'Cash Flow Summary', monthlyIncome: 'Monthly Income', monthlyExpenses: 'Monthly Expenses', netCashFlow: 'Net Cash Flow', categoryBreakdown: 'Category Breakdown', exportCSV: 'Export to CSV', incomeVsExpenses: 'Income vs Expenses', transactionTrend: '30-Day Trend' },
-    categories: { categoryName: 'Category Name', transactions: 'Transactions', avgAmount: 'Avg Amount', lastUsed: 'Last Used' }
+    common: { save: 'Save', cancel: 'Cancel', close: 'Close', delete: 'Delete', edit: 'Edit', logout: 'Logout', login: 'Login', loading: 'Loading...', error: 'Error', success: 'Success', language: 'EN / EL', back: 'Back', create: 'Create', update: 'Update' },
+    nav: { dashboard: 'Dashboard', transactions: 'Transactions', upload: 'Upload', reports: 'Reports', accounts: 'Accounts', ledger: 'Ledger', predictions: 'Predictions', reconciliation: 'Reconciliation' },
+    dashboard: { 
+      welcome: 'Welcome', 
+      totalBalance: 'Total Balance', 
+      totalIncome: 'Total Income', 
+      totalExpenses: 'Total Expenses', 
+      transactionCount: 'Transactions',
+      activeAccounts: 'Active Accounts',
+      netCashFlow: 'Net Cash Flow',
+      reconciled: 'Reconciled',
+      recentTransactions: 'Recent Transactions'
+    },
+    reports: {
+      summary: 'Summary',
+      cashFlow: 'Cash Flow Report',
+      categoryAnalysis: 'Category Analysis',
+      monthlyComparison: 'Monthly Comparison',
+      recurring: 'Recurring Transactions',
+      topTransactions: 'Top Transactions',
+      reconciliation: 'Reconciliation Status'
+    },
+    predictions: {
+      title: 'Predictions & Forecasts',
+      cashFlowForecast: 'Cash Flow Forecast (3 Months)',
+      nextTransactions: 'Next Expected Transactions',
+      recurringPatterns: 'Recurring Patterns'
+    },
+    accounts: {
+      title: 'Account Management',
+      createNew: 'Create New Account',
+      accountName: 'Account Name',
+      accountNumber: 'Account Number',
+      accountType: 'Account Type',
+      currency: 'Currency',
+      openingBalance: 'Opening Balance',
+      currentBalance: 'Current Balance',
+      ledgerHistory: 'Ledger History'
+    },
+    ledger: {
+      title: 'Accounting Ledger',
+      date: 'Date',
+      description: 'Description',
+      debit: 'Debit',
+      credit: 'Credit',
+      balance: 'Balance',
+      reconciled: 'Reconciled'
+    }
   },
   el: {
-    common: { save: 'Αποθήκευση', cancel: 'Ακύρωση', close: 'Κλείσιμο', delete: 'Διώχνω', edit: 'Επεξεργασία', logout: 'Αποσύνδεση', login: 'Σύνδεση', loading: 'Φόρτωση...', error: 'Σφάλμα', success: 'Επιτυχία', language: 'EN / EL' },
-    nav: { dashboard: 'Πίνακας Ελέγχου', transactions: 'Συναλλαγές', upload: 'Ανέβασμα', reports: 'Αναφορές', categories: 'Κατηγορίες' },
-    dashboard: { welcome: 'Καλώς ήρθατε', totalBalance: 'Συνολό Υπόλοιπο', totalIncome: 'Συνολό Εισόδημα (Μήνας)', totalExpenses: 'Συνολά Έξοδα (Μήνας)', transactionCount: 'Συναλλαγές', recentTransactions: 'Πρόσφατες Συναλλαγές' },
-    transactions: { date: 'Ημερομηνία', description: 'Περιγραφή', amount: 'Ποσό', type: 'Τύπος', category: 'Κατηγορία', confidence: 'Εμπιστοσύνη', actions: 'Ενέργειες', filter: 'Φίλτρο', search: 'Αναζήτηση...', from: 'Από', to: 'Έως', amountRange: 'Εύρος Ποσού', noResults: 'Δεν βρέθηκαν συναλλαγές', selectCategory: 'Επιλέξτε Κατηγορία', transaction: 'Συναλλαγή' },
-    upload: { dragDrop: 'Σύρετε και αποθέστε αρχεία εδώ', selectFile: 'Επιλέξτε Αρχείο', uploadBtn: 'Ανέβασμα', recentUploads: 'Πρόσφατα Αναβάσματα', status: 'Κατάσταση', preview: 'Προεπισκόπηση', processing: 'Επεξεργασία με Claude AI...', fileName: 'Όνομα Αρχείου', fileType: 'Τύπος', transactionCount: 'Συναλλαγές' },
-    reports: { summary: 'Περίληψη Ταμειακής Ροής', monthlyIncome: 'Μηνιαίο Εισόδημα', monthlyExpenses: 'Μηνιαία Έξοδα', netCashFlow: 'Καθαρή Ταμειακή Ροή', categoryBreakdown: 'Ανάλυση Κατηγοριών', exportCSV: 'Εξαγωγή σε CSV', incomeVsExpenses: 'Εισόδημα vs Έξοδα', transactionTrend: 'Τάση 30 Ημερών' },
-    categories: { categoryName: 'Όνομα Κατηγορίας', transactions: 'Συναλλαγές', avgAmount: 'Μέσο Ποσό', lastUsed: 'Τελευταία Χρήση' }
+    common: { save: 'Αποθήκευση', cancel: 'Ακύρωση', close: 'Κλείσιμο', delete: 'Διώχνω', edit: 'Επεξεργασία', logout: 'Αποσύνδεση', login: 'Σύνδεση', loading: 'Φόρτωση...', error: 'Σφάλμα', success: 'Επιτυχία', language: 'EN / EL', back: 'Πίσω', create: 'Δημιουργία', update: 'Ενημέρωση' },
+    nav: { dashboard: 'Πίνακας Ελέγχου', transactions: 'Συναλλαγές', upload: 'Ανέβασμα', reports: 'Αναφορές', accounts: 'Λογαριασμοί', ledger: 'Λογιστικό Καθολικό', predictions: 'Προβλέψεις', reconciliation: 'Συμφωνία' },
+    dashboard: { 
+      welcome: 'Καλώς ήρθατε', 
+      totalBalance: 'Συνολό Υπόλοιπο', 
+      totalIncome: 'Συνολό Εισόδημα', 
+      totalExpenses: 'Συνολά Έξοδα', 
+      transactionCount: 'Συναλλαγές',
+      activeAccounts: 'Ενεργοί Λογαριασμοί',
+      netCashFlow: 'Καθαρή Ταμειακή Ροή',
+      reconciled: 'Συμφωνημένες',
+      recentTransactions: 'Πρόσφατες Συναλλαγές'
+    },
+    reports: {
+      summary: 'Περίληψη',
+      cashFlow: 'Έκθεση Ταμειακής Ροής',
+      categoryAnalysis: 'Ανάλυση Κατηγοριών',
+      monthlyComparison: 'Μηνιαία Σύγκριση',
+      recurring: 'Επαναλαμβανόμενες Συναλλαγές',
+      topTransactions: 'Κορυφαίες Συναλλαγές',
+      reconciliation: 'Κατάσταση Συμφωνίας'
+    },
+    predictions: {
+      title: 'Προβλέψεις & Προβολές',
+      cashFlowForecast: 'Πρόβλεψη Ταμειακής Ροής (3 Μήνες)',
+      nextTransactions: 'Αναμενόμενες Επόμενες Συναλλαγές',
+      recurringPatterns: 'Επαναλαμβανόμενα Μοτίβα'
+    },
+    accounts: {
+      title: 'Διαχείριση Λογαριασμών',
+      createNew: 'Δημιουργία Νέου Λογαριασμού',
+      accountName: 'Όνομα Λογαριασμού',
+      accountNumber: 'Αριθμός Λογαριασμού',
+      accountType: 'Τύπος Λογαριασμού',
+      currency: 'Νόμισμα',
+      openingBalance: 'Αρχικό Υπόλοιπο',
+      currentBalance: 'Τρέχον Υπόλοιπο',
+      ledgerHistory: 'Ιστορικό Καθολικού'
+    },
+    ledger: {
+      title: 'Λογιστικό Καθολικό',
+      date: 'Ημερομηνία',
+      description: 'Περιγραφή',
+      debit: 'Χρέωση',
+      credit: 'Πίστωση',
+      balance: 'Υπόλοιπο',
+      reconciled: 'Συμφωνημένο'
+    }
   }
 };
 
-// Mock Categories
-const categories = {
-  credit: [
-    { code: 'INVOICE_PAYMENT_FULL', name_en: 'Invoice Payment (Full)', name_el: 'Πληρωμή Τιμολογίου (Πλήρης)', icon: 'mdi-file-document' },
-    { code: 'INVOICE_PAYMENT_PARTIAL', name_en: 'Invoice Payment (Partial)', name_el: 'Πληρωμή Τιμολογίου (Μερική)', icon: 'mdi-file-percent' },
-    { code: 'CAPITAL_RAISE', name_en: 'Capital Raise', name_el: 'Αύξηση Κεφαλαίου', icon: 'mdi-bank' },
-    { code: 'INTEREST_INCOME', name_en: 'Interest Income', name_el: 'Εισόδημα από Τόκους', icon: 'mdi-cash' },
-    { code: 'EXPENSE_REFUND', name_en: 'Expense Refund', name_el: 'Επιστροφή Εξόδων', icon: 'mdi-refund' },
-    { code: 'LOAN_RECEIVED', name_en: 'Loan Received', name_el: 'Λήψη Δανείου', icon: 'mdi-hand-coin' },
-    { code: 'INTERCOMPANY_IN', name_en: 'Intercompany Transfer In', name_el: 'Ενδοεταιρική Συναλλαγή', icon: 'mdi-account-switch' },
-    { code: 'ATM_DEPOSIT', name_en: 'ATM Deposit', name_el: 'Κατάθεση Μετρητών', icon: 'mdi-bank-transfer-in' },
-    { code: 'UNCATEGORIZED_IN', name_en: 'Uncategorized Income', name_el: 'Μη Κατηγοριοποιημένο', icon: 'mdi-help-circle' }
-  ],
-  debit: [
-    { code: 'SUPPLIER_PAYMENT', name_en: 'Supplier Payment', name_el: 'Πληρωμή Προμηθευτή', icon: 'mdi-truck' },
-    { code: 'LOAN_REPAYMENT', name_en: 'Loan Repayment', name_el: 'Αποπληρωμή Δανείου', icon: 'mdi-bank-transfer-out' },
-    { code: 'BANK_FEES', name_en: 'Bank Fees', name_el: 'Τραπεζικά Έξοδα', icon: 'mdi-currency-eur' },
-    { code: 'TAX_PAYMENT', name_en: 'Tax Payment', name_el: 'Πληρωμή Φόρων', icon: 'mdi-receipt' },
-    { code: 'PAYROLL', name_en: 'Payroll', name_el: 'Μισθοδοσία', icon: 'mdi-account-multiple' },
-    { code: 'RENT', name_en: 'Rent Payment', name_el: 'Πληρωμή Ενοικίου', icon: 'mdi-home-city' },
-    { code: 'UTILITIES', name_en: 'Utilities', name_el: 'Κοινόχρηστα/ΔΕΗ', icon: 'mdi-flash' },
-    { code: 'ADMIN_EXPENSES', name_en: 'Admin Expenses', name_el: 'Διοικητικά Έξοδα', icon: 'mdi-clipboard' },
-    { code: 'ATM_WITHDRAWAL', name_en: 'ATM Withdrawal', name_el: 'Ανάληψη Μετρητών', icon: 'mdi-bank-transfer-out' }
-  ]
-};
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
 
-// Utility Functions
 function t(path) {
   const keys = path.split('.');
   let result = translations[state.language] || translations.en;
@@ -91,87 +200,234 @@ function formatDate(dateString) {
   return new Date(dateString).toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', options);
 }
 
-function getCategoryName(code) {
-  // Handle undefined or null
-  if (!code || code === 'undefined' || code === 'null') {
-    return state.language === 'el' ? 'Μη Κατηγοριοποιημένο' : 'Uncategorized';
-  }
-  
-  const allCats = [...categories.credit, ...categories.debit];
-  const cat = allCats.find(c => c.code === code);
-  
-  if (cat) {
-    return state.language === 'el' ? cat.name_el : cat.name_en;
-  }
-  
-  // If category not found, return the code itself
-  console.warn('Category not found:', code);
-  return code;
+// ========================================
+// API FUNCTIONS - ENHANCED
+// ========================================
+
+function setLanguage(lang) {
+  state.language = lang;
+  localStorage.setItem('language', lang);
+  console.log('🌍 Language changed to:', lang);
+  render();
+}
+
+function changeLanguage(lang) {
+  setLanguage(lang);
 }
 
 
-function getCategoryIcon(code) {
-  const allCats = [...categories.credit, ...categories.debit];
-  const cat = allCats.find(c => c.code === code);
-  return cat ? cat.icon : 'mdi-help-circle';
-}
 
-// ========================================
-// FIX 1: Load transactions from backend
-// ========================================
-async function loadTransactionsFromDB() {
+async function loadReportsData() {
   try {
-    console.log('📊 Loading transactions from database...');
-    const response = await fetch('http://localhost:5001/api/transactions?limit=1000');
+    console.log('📊 Loading reports data...');
     
-    if (!response.ok) {
-      console.error('Failed to load transactions:', response.status);
-      return;
+    const dateFrom = document.getElementById('reportDateFrom')?.value;
+    const dateTo = document.getElementById('reportDateTo')?.value;
+
+    const filters = {};
+    if (dateFrom) filters.dateFrom = dateFrom;
+    if (dateTo) filters.dateTo = dateTo;
+
+    const queryString = new URLSearchParams(filters).toString();
+
+    const [categoryData, reconcileData] = await Promise.all([
+      fetch(`${endpoints.categoryAnalysis}${queryString ? '?' + queryString : ''}`).then(r => r.json()).catch(e => { console.error('Category error:', e); return []; }),
+      fetch(`${endpoints.reconciliation}${queryString ? '?' + queryString : ''}`).then(r => r.json()).catch(e => { console.error('Reconcile error:', e); return []; })
+    ]);
+
+    // Update category table
+    const categoryBody = document.getElementById('categoryBody');
+    if (categoryBody && categoryData.length > 0) {
+      categoryBody.innerHTML = categoryData.map(c => `
+        <tr>
+          <td>${state.language === 'en' ? c.name_en : c.name_el}</td>
+          <td><span style="background-color: ${c.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; padding: 4px 8px; border-radius: 4px; color: ${c.type === 'CREDIT' ? '#10b981' : '#ef4444'};">${c.type}</span></td>
+          <td>${c.transaction_count || 0}</td>
+          <td>${formatCurrency(c.total_amount || 0)}</td>
+          <td>${formatCurrency(c.average_amount || 0)}</td>
+        </tr>
+      `).join('');
     }
-    
-    const transactions = await response.json();
-    console.log('✅ Loaded', transactions.length, 'transactions from database');
-    
-    // Map database fields to frontend format
-    state.transactions = transactions.map(txn => ({
-      id: txn.id,
-      date: txn.date,
-      description: txn.description,
-      amount: txn.amount,
-      type: txn.type,
-      category: txn.categoryCode, // ← FIX: Use categoryCode
-      categoryCode: txn.categoryCode,
-      confidence: txn.confidence,
-      counterparty: txn.counterparty || '',
-      reasoning: txn.reasoning || ''
-    }));
-    
-    console.log('✅ State updated with', state.transactions.length, 'transactions');
-    render();
-    
+
+    // Update reconciliation table
+    const reconcileBody = document.getElementById('reconcileBody');
+    if (reconcileBody && reconcileData.length > 0) {
+      reconcileBody.innerHTML = reconcileData.map(r => `
+        <tr>
+          <td>${r.status}</td>
+          <td>${r.count || 0}</td>
+          <td>${formatCurrency(r.total_amount || 0)}</td>
+          <td>${r.percentage ? r.percentage.toFixed(1) : 0}%</td>
+        </tr>
+      `).join('');
+    }
+
+    // Draw charts
+    drawReportsCharts(categoryData);
+
+    console.log('✅ Reports loaded');
   } catch (error) {
-    console.error('❌ Error loading transactions:', error);
+    console.error('❌ Error loading reports:', error);
   }
 }
 
-// ========================================
-// FIX 2: Check session on page load
-// ========================================
-function checkSession() {
-  const isLoggedIn = localStorage.getItem('isLoggedIn');
-  const userJson = localStorage.getItem('currentUser');
-  
-  if (isLoggedIn === 'true' && userJson) {
-    state.isLoggedIn = true;
-    state.currentUser = JSON.parse(userJson);
-    state.currentPage = 'dashboard';
+function drawReportsCharts(categoryData) {
+  setTimeout(() => {
+    // Category Pie Chart
+    const categoryCtx = document.getElementById('categoryChart');
+    if (categoryCtx && categoryData && categoryData.length > 0) {
+      // Destroy existing chart if any
+      if (window.categoryChartInstance) {
+        window.categoryChartInstance.destroy();
+      }
+
+      const creditTotal = categoryData
+        .filter(c => c.type === 'CREDIT')
+        .reduce((sum, c) => sum + (c.total_amount || 0), 0);
+      
+      const debitTotal = categoryData
+        .filter(c => c.type === 'DEBIT')
+        .reduce((sum, c) => sum + (c.total_amount || 0), 0);
+
+      window.categoryChartInstance = new Chart(categoryCtx, {
+        type: 'pie',
+        data: {
+          labels: [
+            state.language === 'en' ? 'Income' : 'Εισόδημα',
+            state.language === 'en' ? 'Expenses' : 'Έξοδα'
+          ],
+          datasets: [{
+            data: [creditTotal, debitTotal],
+            backgroundColor: ['#10b981', '#ef4444'],
+            borderColor: '#0F1419',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#E5E7EB' }
+            }
+          }
+        }
+      });
+    }
+
+    // Monthly Chart
+    const monthlyCtx = document.getElementById('monthlyChart');
+    if (monthlyCtx) {
+      if (window.monthlyChartInstance) {
+        window.monthlyChartInstance.destroy();
+      }
+
+      const monthData = categoryData.slice(0, 12);
+      
+      window.monthlyChartInstance = new Chart(monthlyCtx, {
+        type: 'bar',
+        data: {
+          labels: monthData.map((_, i) => `Month ${i + 1}`),
+          datasets: [
+            {
+              label: state.language === 'en' ? 'Income' : 'Εισόδημα',
+              data: monthData.map(m => m.total_amount || 0),
+              backgroundColor: '#10b981'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#E5E7EB' }
+            }
+          },
+          scales: {
+            y: {
+              ticks: { color: '#9CA3AF' },
+              grid: { color: '#1F2937' }
+            },
+            x: {
+              ticks: { color: '#9CA3AF' },
+              grid: { color: '#1F2937' }
+            }
+          }
+        }
+      });
+    }
+  }, 100);
+}
+
+
+
+async function loadDashboard() {
+  try {
+    console.log('📊 Loading dashboard data...');
     
-    // Load transactions immediately
-    loadTransactionsFromDB();
+    const [summary, cashFlow, topTxns, recurring] = await Promise.all([
+      fetch(endpoints.dashboard).then(r => r.json()),
+      fetch(endpoints.cashFlow).then(r => r.json()),
+      fetch(`${endpoints.topTransactions}?limit=5`).then(r => r.json()),
+      fetch(`${endpoints.recurring}?minOccurrences=3`).then(r => r.json())
+    ]);
+
+    state.reports = { summary, cashFlow, topTxns, recurring };
+    console.log('✅ Dashboard data loaded');
+    render();
+  } catch (error) {
+    console.error('❌ Error loading dashboard:', error);
   }
 }
 
-// Render Functions
+async function loadAccounts() {
+  try {
+    console.log('📊 Loading accounts...');
+    const accounts = await fetch(endpoints.accounts).then(r => r.json());
+    state.accounts = accounts;
+    console.log('✅ Accounts loaded:', accounts.length);
+    return accounts;
+  } catch (error) {
+    console.error('❌ Error loading accounts:', error);
+    return [];
+  }
+}
+
+async function loadAccountLedger(accountId) {
+  try {
+    console.log('📊 Loading ledger for', accountId);
+    const ledger = await fetch(endpoints.accountLedger(accountId)).then(r => r.json());
+    state.ledger = ledger;
+    console.log('✅ Ledger loaded:', ledger.length);
+    return ledger;
+  } catch (error) {
+    console.error('❌ Error loading ledger:', error);
+    return [];
+  }
+}
+
+async function loadPredictions() {
+  try {
+    console.log('🔮 Loading predictions...');
+    const [forecast, recurring] = await Promise.all([
+      fetch(`${endpoints.forecast}?months=3`).then(r => r.json()),
+      fetch(`${endpoints.recurring}?minOccurrences=3`).then(r => r.json())
+    ]);
+    state.predictions = { forecast, recurring };
+    console.log('✅ Predictions loaded');
+    return { forecast, recurring };
+  } catch (error) {
+    console.error('❌ Error loading predictions:', error);
+    return { forecast: [], recurring: [] };
+  }
+}
+
+// ========================================
+// RENDER FUNCTIONS - REFACTORED
+// ========================================
+
 function render() {
   const app = document.getElementById('app');
   
@@ -188,263 +444,772 @@ function renderLogin() {
   return `
     <div class="login-container">
       <div class="login-box">
-        <div class="login-logo">
-          <i class="mdi mdi-bank"></i>
-        </div>
-        <h1 class="login-title">${state.language === 'en' ? 'Smart Ledger AI' : 'Smart Ledger AI'}</h1>
+        <div class="login-logo">📊 Smart Ledger</div>
+        <h1 class="login-title">${t('common.login')}</h1>
+        
         <form id="loginForm">
-          <div class="form-group">
-            <label>${state.language === 'en' ? 'Email' : 'Email'}</label>
-            <input type="email" id="email" value="demo@smartledger.gr" required>
+          <!-- Language Selector at Top -->
+          <div class="form-group" style="margin-bottom: 20px; display: flex; gap: 10px;">
+            <label style="flex: 1;">${t('common.language')}:</label>
+            <div style="flex: 2; display: flex; gap: 5px;">
+              <button 
+                type="button" 
+                class="lang-btn ${state.language === 'en' ? 'lang-btn-active' : ''}"
+                onclick="setLanguage('en')"
+                style="flex: 1; padding: 8px; background-color: ${state.language === 'en' ? '#FFB800' : '#1F2937'}; color: ${state.language === 'en' ? '#000' : '#E5E7EB'}; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                🇬🇧 EN
+              </button>
+              <button 
+                type="button" 
+                class="lang-btn ${state.language === 'el' ? 'lang-btn-active' : ''}"
+                onclick="setLanguage('el')"
+                style="flex: 1; padding: 8px; background-color: ${state.language === 'el' ? '#FFB800' : '#1F2937'}; color: ${state.language === 'el' ? '#000' : '#E5E7EB'}; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                🇬🇷 EL
+              </button>
+            </div>
           </div>
-          <div class="form-group">
-            <label>${state.language === 'en' ? 'Password' : 'Κωδικός Πρόσβασης'}</label>
-            <input type="password" id="password" value="demo123" required>
+
+          <hr style="border: none; border-top: 1px solid #1F2937; margin: 20px 0;">
+
+          <!-- Demo Account Info -->
+          <div style="background-color: #1F2937; border-left: 4px solid #FFB800; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 12px;">
+            <div style="font-weight: 600; margin-bottom: 5px;">💡 ${state.language === 'en' ? 'Demo Account' : 'Δημο Λογαριασμό'}</div>
+            <div>${state.language === 'en' ? 'Username: ' : 'Όνομα χρήστη: '}<strong>demo</strong></div>
+            <div>${state.language === 'en' ? 'Password: ' : 'Κωδικός: '}<strong>demo</strong></div>
           </div>
-          <button type="submit" class="login-btn">${t('common.login')}</button>
-          <div id="loginError" class="error-message"></div>
+
+          <!-- Username Field -->
+          <div class="form-group">
+            <label>${state.language === 'en' ? 'Username' : 'Όνομα Χρήστη'}:</label>
+            <input 
+              type="text" 
+              id="username" 
+              required 
+              value="demo"
+              placeholder="demo"
+              style="width: 100%; padding: 12px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB; font-size: 14px;">
+          </div>
+
+          <!-- Password Field -->
+          <div class="form-group">
+            <label>${state.language === 'en' ? 'Password' : 'Κωδικός'}:</label>
+            <input 
+              type="password" 
+              id="password" 
+              required 
+              value="demo"
+              placeholder="demo"
+              style="width: 100%; padding: 12px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB; font-size: 14px;">
+          </div>
+
+          <!-- Login Button -->
+          <button 
+            type="submit" 
+            class="login-btn"
+            style="width: 100%; padding: 12px; margin-top: 20px; background-color: #FFB800; color: #000; border: none; border-radius: 6px; font-weight: 600; font-size: 16px; cursor: pointer; transition: all 0.3s;">
+            ${state.language === 'en' ? '🔐 Login' : '🔐 Σύνδεση'}
+          </button>
+
+          <!-- Error Message -->
+          <div id="errorMessage" class="error-message" style="margin-top: 15px; color: #ef4444; text-align: center; font-size: 14px;"></div>
+
+          <!-- Footer Info -->
+          <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #9CA3AF;">
+            <div>${state.language === 'en' ? 'Smart Ledger v2.0' : 'Smart Ledger v2.0'}</div>
+            <div>${state.language === 'en' ? 'AI-Powered Financial Dashboard' : 'Πίνακας Χρηματοοικονομικών Δεδομένων Με Ενισχυμένη Τεχνητή Νοημοσύνη'}</div>
+          </div>
         </form>
-        <div class="sidebar-footer" style="margin-top: 30px;">
-          <button class="lang-toggle" onclick="toggleLanguage()">EN / EL</button>
-        </div>
       </div>
     </div>
   `;
 }
 
 function renderMain() {
-  let content = '';
-  switch(state.currentPage) {
-    case 'dashboard':
-      content = renderDashboard();
-      break;
-    case 'transactions':
-      content = renderTransactions();
-      break;
-    case 'upload':
-      content = renderUpload();
-      break;
-    case 'reports':
-      content = renderReports();
-      break;
-    case 'categories':
-      content = renderCategories();
-      break;
-  }
-
   return `
-    <div style="display: flex; width: 100%; height: 100vh; margin: 0; padding: 0; overflow: hidden;">
-      <div class="sidebar">
-        <div class="sidebar-logo">
-          <i class="mdi mdi-bank"></i>
-          <span>Smart Ledger</span>
-        </div>
-        <ul class="nav-menu">
-          <li class="nav-item">
-            <a class="nav-link ${state.currentPage === 'dashboard' ? 'active' : ''}" onclick="navigateTo('dashboard')">
-              <i class="mdi mdi-home"></i>
-              <span>${t('nav.dashboard')}</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link ${state.currentPage === 'transactions' ? 'active' : ''}" onclick="navigateTo('transactions')">
-              <i class="mdi mdi-table"></i>
-              <span>${t('nav.transactions')}</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link ${state.currentPage === 'upload' ? 'active' : ''}" onclick="navigateTo('upload')">
-              <i class="mdi mdi-cloud-upload"></i>
-              <span>${t('nav.upload')}</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link ${state.currentPage === 'reports' ? 'active' : ''}" onclick="navigateTo('reports')">
-              <i class="mdi mdi-chart-box"></i>
-              <span>${t('nav.reports')}</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link ${state.currentPage === 'categories' ? 'active' : ''}" onclick="navigateTo('categories')">
-              <i class="mdi mdi-tag-multiple"></i>
-              <span>${t('nav.categories')}</span>
-            </a>
-          </li>
-        </ul>
-        <div class="sidebar-footer">
-          <button class="lang-toggle" onclick="toggleLanguage()">${state.language.toUpperCase()}</button>
-          <button class="logout-btn" onclick="logout()" style="flex: 1;">
-            <i class="mdi mdi-logout" style="margin-right: 5px;"></i>
-            ${t('common.logout')}
-          </button>
-        </div>
-      </div>
-      <div class="main-content" style="width: 100%; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-        <div class="navbar">
-          <div class="navbar-title">${state.currentPage.charAt(0).toUpperCase() + state.currentPage.slice(1)}</div>
-          <div class="navbar-right">
-            <span>${state.currentUser?.fullName}</span>
-          </div>
-        </div>
+    <div style="display: flex; width: 100%; height: 100vh; overflow: hidden;">
+      ${renderSidebar()}
+      <div class="main-content">
+        ${renderNavbar()}
         <div class="page-content">
-          ${content}
+          ${renderPageContent()}
         </div>
       </div>
     </div>
   `;
 }
 
-function renderDashboard() {
-  const totalIncome = state.transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = state.transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
-  const balance = totalIncome - totalExpenses;
-  const recentTxn = state.transactions.slice(0, 10);
+function renderSidebar() {
+  return `
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <i class="mdi mdi-chart-line"></i>
+        <span>Smart Ledger</span>
+      </div>
+      
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'dashboard' ? 'active' : ''}" onclick="changePage('dashboard')">
+            <i class="mdi mdi-home"></i>
+            <span>${t('nav.dashboard')}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'transactions' ? 'active' : ''}" onclick="changePage('transactions')">
+            <i class="mdi mdi-swap-horizontal"></i>
+            <span>${t('nav.transactions')}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'accounts' ? 'active' : ''}" onclick="changePage('accounts')">
+            <i class="mdi mdi-bank"></i>
+            <span>${t('nav.accounts')}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'reports' ? 'active' : ''}" onclick="changePage('reports')">
+            <i class="mdi mdi-chart-bar"></i>
+            <span>${t('nav.reports')}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'ledger' ? 'active' : ''}" onclick="changePage('ledger')">
+            <i class="mdi mdi-book-open"></i>
+            <span>${t('nav.ledger')}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'predictions' ? 'active' : ''}" onclick="changePage('predictions')">
+            <i class="mdi mdi-crystal-ball"></i>
+            <span>${t('nav.predictions')}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link ${state.currentPage === 'upload' ? 'active' : ''}" onclick="changePage('upload')">
+            <i class="mdi mdi-cloud-upload"></i>
+            <span>${t('nav.upload')}</span>
+          </a>
+        </li>
+      </ul>
+      
+      <!-- Language Toggle - ENHANCED -->
+      <div class="sidebar-footer">
+        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+          <button 
+            class="lang-toggle ${state.language === 'en' ? 'lang-btn-active' : ''}"
+            onclick="setLanguage('en')"
+            style="flex: 1; padding: 8px; background-color: ${state.language === 'en' ? '#FFB800' : '#1F2937'}; color: ${state.language === 'en' ? '#000' : '#E5E7EB'}; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.3s;">
+            🇬🇧 EN
+          </button>
+          <button 
+            class="lang-toggle ${state.language === 'el' ? 'lang-btn-active' : ''}"
+            onclick="setLanguage('el')"
+            style="flex: 1; padding: 8px; background-color: ${state.language === 'el' ? '#FFB800' : '#1F2937'}; color: ${state.language === 'el' ? '#000' : '#E5E7EB'}; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.3s;">
+            🇬🇷 EL
+          </button>
+        </div>
+        
+        <button 
+          class="lang-toggle" 
+          onclick="logout()"
+          style="width: 100%; background-color: #ef4444; color: white; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+          ${t('common.logout')}
+        </button>
+      </div>
+    </div>
+  `;
+}
 
+
+function renderNavbar() {
+  return `
+    <div class="navbar">
+      <h2 class="navbar-title">${getPageTitle()}</h2>
+      <div class="navbar-right">
+        <span style="font-size: 14px;">👤 ${state.currentUser?.username || 'User'}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderPageContent() {
+  switch(state.currentPage) {
+    case 'dashboard': return renderDashboard();
+    case 'transactions': return renderTransactions();
+    case 'accounts': return renderAccounts();
+    case 'reports': return renderReports();
+    case 'ledger': return renderLedger();
+    case 'predictions': return renderPredictions();
+    case 'upload': return renderUpload();
+    default: return renderDashboard();
+  }
+}
+
+// ========================================
+// DASHBOARD - NEW VERSION
+// ========================================
+
+function renderDashboard() {
+  const summary = state.reports.summary || {};
+  
   return `
     <div>
-      <h2 style="margin-bottom: 20px; font-weight: 300;">${t('dashboard.welcome')}, ${state.currentUser?.fullName}!</h2>
+      <h2>${t('dashboard.welcome')}, ${state.currentUser?.username}! 👋</h2>
+      
+      <!-- Summary Cards -->
       <div class="dashboard-grid">
         <div class="card card-gold">
           <div class="card-title">${t('dashboard.totalBalance')}</div>
-          <div class="card-value">${formatCurrency(balance)}</div>
+          <div class="card-value">€${(summary.credit_total - summary.debit_total || 0).toFixed(2)}</div>
         </div>
+        
         <div class="card card-green">
           <div class="card-title">${t('dashboard.totalIncome')}</div>
-          <div class="card-value">${formatCurrency(totalIncome)}</div>
+          <div class="card-value">€${(summary.credit_total || 0).toFixed(2)}</div>
         </div>
+        
         <div class="card card-red">
           <div class="card-title">${t('dashboard.totalExpenses')}</div>
-          <div class="card-value">${formatCurrency(totalExpenses)}</div>
+          <div class="card-value">€${(summary.debit_total || 0).toFixed(2)}</div>
         </div>
+        
         <div class="card">
           <div class="card-title">${t('dashboard.transactionCount')}</div>
-          <div class="card-value">${state.transactions.length}</div>
+          <div class="card-value">${summary.total_transactions || 0}</div>
         </div>
       </div>
-
+      
+      <!-- Charts Row -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
+        <div class="card">
+          <h3>${t('reports.cashFlow')}</h3>
+          <canvas id="cashFlowChart"></canvas>
+        </div>
+        
+        <div class="card">
+          <h3>${t('predictions.recurringPatterns')}</h3>
+          <div id="recurringList"></div>
+        </div>
+      </div>
+      
+      <!-- Recent Transactions -->
       <div class="card" style="margin-top: 20px;">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">${t('dashboard.recentTransactions')}</h3>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>${t('transactions.date')}</th>
-                <th>${t('transactions.description')}</th>
-                <th>${t('transactions.amount')}</th>
-                <th>${t('transactions.type')}</th>
-                <th>${t('transactions.category')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recentTxn.length === 0 ? `<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-secondary);">No transactions yet. Upload a file to get started!</td></tr>` : recentTxn.map(txn => `
-                <tr>
-                  <td>${formatDate(txn.date)}</td>
-                  <td>${txn.description}</td>
-                  <td>${formatCurrency(txn.amount)}</td>
-                  <td><span class="type-${txn.type.toLowerCase()}">${txn.type}</span></td>
-                  <td><span class="category-badge">${getCategoryName(txn.categoryCode || txn.category)}</span></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+        <h3>${t('dashboard.recentTransactions')}</h3>
+        <table id="recentTable" class="table" style="width: 100%; margin-top: 15px;">
+          <thead>
+            <tr>
+              <th>${t('transactions.date')}</th>
+              <th>${t('transactions.description')}</th>
+              <th>${t('transactions.amount')}</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody id="recentBody">
+            <tr><td colspan="4">${t('common.loading')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ========================================
+// ACCOUNTS PAGE
+// ========================================
+
+function renderAccounts() {
+  return `
+    <div>
+      <button class="btn-primary" style="margin-bottom: 20px;" onclick="showCreateAccountModal()">
+        + ${t('accounts.createNew')}
+      </button>
+      
+      <div class="table-container">
+        <table id="accountsTable" class="table">
+          <thead>
+            <tr>
+              <th>${t('accounts.accountName')}</th>
+              <th>${t('accounts.accountNumber')}</th>
+              <th>${t('accounts.accountType')}</th>
+              <th>${t('accounts.currentBalance')}</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="accountsBody">
+            <tr><td colspan="5">${t('common.loading')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div id="createAccountModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>${t('accounts.createNew')}</h3>
+            <button class="modal-close" onclick="closeModal('createAccountModal')">×</button>
+          </div>
+          
+          <form id="createAccountForm" onsubmit="createAccount(event)">
+            <div class="form-group">
+              <label>${t('accounts.accountName')}:</label>
+              <input type="text" id="accountName" required>
+            </div>
+            
+            <div class="form-group">
+              <label>${t('accounts.accountNumber')}:</label>
+              <input type="text" id="accountNumber">
+            </div>
+            
+            <div class="form-group">
+              <label>${t('accounts.accountType')}:</label>
+              <select id="accountType">
+                <option value="checking">Checking</option>
+                <option value="savings">Savings</option>
+                <option value="cash">Cash</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>${t('accounts.openingBalance')}:</label>
+              <input type="number" id="openingBalance" step="0.01" value="0">
+            </div>
+            
+            <div class="modal-footer">
+              <button type="button" class="btn-secondary" onclick="closeModal('createAccountModal')">${t('common.cancel')}</button>
+              <button type="submit" class="btn-primary">${t('common.create')}</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
   `;
 }
 
-function renderTransactions() {
-  const filteredTxn = filterTransactions();
-  const totalPages = Math.ceil(filteredTxn.length / state.transactionsPerPage);
-  const startIdx = (state.currentTransactionPage - 1) * state.transactionsPerPage;
-  const paginatedTxn = filteredTxn.slice(startIdx, startIdx + state.transactionsPerPage);
+// ========================================
+// REPORTS PAGE
+// ========================================
 
-  if (state.transactions.length === 0) {
-    return `
-      <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
-        <div style="font-size: 24px; margin-bottom: 10px;">📊 No Transactions Yet</div>
-        <div>Upload a file from the <strong>Upload</strong> page to see your transactions analyzed by Claude AI</div>
-      </div>
-    `;
-  }
-
+function renderReports() {
   return `
-    <div>
-      <div class="filters-container">
-        <div class="filter-group">
-          <label class="filter-label">${t('transactions.from')}</label>
-          <input type="date" class="filter-input" id="filterFrom" onchange="updateFilters()">
+    <div style="height: calc(100vh - 80px); overflow-y: auto; padding: 20px;">
+      
+      <!-- Title -->
+      <h2 style="margin-bottom: 20px; color: #FFB800;">📊 ${t('nav.reports')}</h2>
+      
+      <!-- Filters Row -->
+      <div class="card" style="margin-bottom: 20px;">
+        <h3>${t('reports.summary')}</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+          <div style="display: flex; flex-direction: column;">
+            <label style="font-size: 12px; color: #9CA3AF; margin-bottom: 5px;">${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}:</label>
+            <input type="date" id="reportDateFrom" style="padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <label style="font-size: 12px; color: #9CA3AF; margin-bottom: 5px;">${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}:</label>
+            <input type="date" id="reportDateTo" style="padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+          </div>
+          <div style="display: flex; align-items: flex-end;">
+            <button class="btn-primary" onclick="loadReportsData()" style="width: 100%; padding: 8px;">
+              ${state.language === 'en' ? 'Generate Reports' : 'Δημιουργία Αναφορών'}
+            </button>
+          </div>
         </div>
-        <div class="filter-group">
-          <label class="filter-label">${t('transactions.to')}</label>
-          <input type="date" class="filter-input" id="filterTo" onchange="updateFilters()">
-        </div>
-        <div class="filter-group">
-          <label class="filter-label">${t('transactions.category')}</label>
-          <select class="filter-select" id="filterCategory" onchange="updateFilters()">
-            <option value="">All Categories</option>
-            ${[...categories.credit, ...categories.debit].map(cat => `<option value="${cat.code}">${state.language === 'el' ? cat.name_el : cat.name_en}</option>`).join('')}
-          </select>
-        </div>
-        <div class="filter-group">
-          <label class="filter-label">${t('transactions.type')}</label>
-          <select class="filter-select" id="filterType" onchange="updateFilters()">
-            <option value="all">All</option>
-            <option value="CREDIT">Credit</option>
-            <option value="DEBIT">Debit</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label class="filter-label">${t('transactions.search')}</label>
-          <input type="text" class="filter-input" id="filterSearch" placeholder="${t('transactions.search')}" onchange="updateFilters()" style="width: 150px;">
-        </div>
-        <div class="filter-group">
-          <label class="filter-label">${t('transactions.amountRange')}</label>
-          <input type="number" class="filter-input" id="filterAmountMin" placeholder="Min" value="0" onchange="updateFilters()" style="width: 100px;">
-          <input type="number" class="filter-input" id="filterAmountMax" placeholder="Max" value="1000000" onchange="updateFilters()" style="width: 100px;">
-        </div>    
-    </div>
+      </div>
 
-      <div class="table-container">
-        <div class="table-wrapper">
-          <table>
+      <!-- Charts Container - FIXED HEIGHT -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        
+        <!-- Category Chart -->
+        <div class="card" style="height: 350px; display: flex; flex-direction: column;">
+          <h3>${t('reports.categoryAnalysis')}</h3>
+          <div style="flex: 1; position: relative; min-height: 280px;">
+            <canvas id="categoryChart" style="max-height: 250px;"></canvas>
+          </div>
+        </div>
+
+        <!-- Monthly Chart -->
+        <div class="card" style="height: 350px; display: flex; flex-direction: column;">
+          <h3>${t('reports.monthlyComparison')}</h3>
+          <div style="flex: 1; position: relative; min-height: 280px;">
+            <canvas id="monthlyChart" style="max-height: 250px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reconciliation Status -->
+      <div class="card" style="margin-bottom: 20px;">
+        <h3>${t('reports.reconciliation')}</h3>
+        <table class="table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>${state.language === 'en' ? 'Status' : 'Κατάσταση'}</th>
+              <th>${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
+              <th>${state.language === 'en' ? 'Amount' : 'Ποσό'}</th>
+              <th>${state.language === 'en' ? 'Percentage' : 'Ποσοστό'}</th>
+            </tr>
+          </thead>
+          <tbody id="reconcileBody">
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px;">
+                <span style="color: #9CA3AF;">${t('common.loading')}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Category Breakdown Table -->
+      <div class="card">
+        <h3>${t('reports.categoryAnalysis')}</h3>
+        <div style="max-height: 400px; overflow-y: auto;">
+          <table class="table" style="width: 100%;">
             <thead>
               <tr>
-                <th onclick="sortTransactions('date')">${t('transactions.date')} <i class="mdi mdi-arrow-up-down" style="font-size: 12px;"></i></th>
-                <th>${t('transactions.description')}</th>
-                <th onclick="sortTransactions('amount')">${t('transactions.amount')} <i class="mdi mdi-arrow-up-down" style="font-size: 12px;"></i></th>
-                <th>${t('transactions.type')}</th>
-                <th>${t('transactions.category')}</th>
-                <th>${t('transactions.confidence')}</th>
-                <th>${t('transactions.actions')}</th>
+                <th>${state.language === 'en' ? 'Category' : 'Κατηγορία'}</th>
+                <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
+                <th>${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
+                <th>${state.language === 'en' ? 'Total' : 'Σύνολο'}</th>
+                <th>${state.language === 'en' ? 'Average' : 'Μέσος'}</th>
               </tr>
             </thead>
-            <tbody>
-              ${paginatedTxn.length === 0 ? `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">${t('transactions.noResults')}</td></tr>` : paginatedTxn.map(txn => `
-                <tr>
-                  <td>${formatDate(txn.date)}</td>
-                  <td>${txn.description}</td>
-                  <td>${formatCurrency(txn.amount)}</td>
-                  <td><span class="type-${txn.type.toLowerCase()}">${txn.type}</span></td>
-                  <td><span class="category-badge">${getCategoryName(txn.categoryCode || txn.category)}</span></td>
-                  <td><span class="confidence-badge">${(txn.confidence * 100).toFixed(0)}%</span></td>
-                  <td><button class="action-btn" onclick="editTransaction('${txn.id}')">${t('common.edit')}</button></td>
-                </tr>
-              `).join('')}
+            <tbody id="categoryBody">
+              <tr>
+                <td colspan="5" style="text-align: center; padding: 20px;">
+                  <span style="color: #9CA3AF;">${t('common.loading')}</span>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <div class="pagination">
-        <button onclick="previousPage()" ${state.currentTransactionPage === 1 ? 'disabled' : ''}>${state.language === 'en' ? 'Previous' : 'Προηγούμενο'}</button>
-        <span>${state.currentTransactionPage} / ${totalPages}</span>
-        <button onclick="nextPage()" ${state.currentTransactionPage === totalPages ? 'disabled' : ''}>${state.language === 'en' ? 'Next' : 'Επόμενο'}</button>
-        <select onchange="state.transactionsPerPage = parseInt(this.value); render()">
-          <option value="10">10 per page</option>
-          <option value="25">25 per page</option>
-          <option value="50">50 per page</option>
+    </div>
+  `;
+}
+
+// ========================================
+// LEDGER PAGE
+// ========================================
+
+function renderLedger() {
+  return `
+    <div>
+      <div style="margin-bottom: 20px;">
+        <label>${t('accounts.accountName')}:</label>
+        <select id="ledgerAccountSelect" onchange="loadAccountLedger(this.value)">
+          ${state.accounts.map(a => `<option value="${a.id}">${a.account_name}</option>`).join('')}
         </select>
+      </div>
+      
+      <div class="table-container">
+        <table id="ledgerTable" class="table">
+          <thead>
+            <tr>
+              <th>${t('ledger.date')}</th>
+              <th>${t('ledger.description')}</th>
+              <th>${t('ledger.debit')}</th>
+              <th>${t('ledger.credit')}</th>
+              <th>${t('ledger.balance')}</th>
+              <th>${t('ledger.reconciled')}</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerBody">
+            <tr><td colspan="6">${t('common.loading')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ========================================
+// PREDICTIONS PAGE
+// ========================================
+
+function renderPredictions() {
+  return `
+    <div>
+      <h2>${t('predictions.title')} 🔮</h2>
+      
+      <div class="card" style="margin-top: 20px;">
+        <h3>${t('predictions.cashFlowForecast')}</h3>
+        <canvas id="forecastChart"></canvas>
+      </div>
+      
+      <div class="card" style="margin-top: 20px;">
+        <h3>${t('predictions.nextTransactions')}</h3>
+        <table id="predictionsTable" class="table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Predicted Income</th>
+              <th>Predicted Expenses</th>
+              <th>Net Flow</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="predictionsBody">
+            <tr><td colspan="5">${t('common.loading')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ========================================
+// TRANSACTIONS & UPLOAD (KEEP EXISTING)
+// ========================================
+
+
+// ========================================
+// FILE UPLOAD HANDLERS
+// ========================================
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+    uploadArea.style.backgroundColor = 'rgba(255, 184, 0, 0.15)';
+    uploadArea.style.borderColor = '#FFC933';
+  }
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+    uploadArea.style.backgroundColor = 'rgba(255, 184, 0, 0.05)';
+    uploadArea.style.borderColor = '#FFB800';
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+    uploadArea.style.backgroundColor = 'rgba(255, 184, 0, 0.05)';
+    uploadArea.style.borderColor = '#FFB800';
+  }
+  
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    uploadFile(files);
+  }
+}
+
+function handleFileSelect(e) {
+  const files = e.target.files;
+  if (files.length > 0) {
+    uploadFile(files);
+  }
+}
+
+async function uploadFile(file) {
+  try {
+    console.log('📤 Starting file upload:', file.name);
+    
+    // Show progress
+    document.getElementById('uploadProgress').style.display = 'block';
+    document.getElementById('previewContainer').style.display = 'none';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Simulate progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      if (progress < 90) {
+        progress += Math.random() * 30;
+        updateProgressBar(Math.min(progress, 90));
+      }
+    }, 200);
+
+    console.log('📨 Sending file to backend...');
+    const response = await fetch(`${API_BASE}/files/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    clearInterval(progressInterval);
+    updateProgressBar(100);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ File uploaded response:', data);
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    // Show preview
+    displayFilePreview(data);
+    
+    // Update uploads list
+    await loadRecentUploads();
+
+    // Refresh dashboard after successful upload
+    setTimeout(() => {
+      document.getElementById('uploadProgress').style.display = 'none';
+      alert(state.language === 'en' 
+        ? `✅ File uploaded successfully! ${data.transactions?.length || 0} transactions extracted.`
+        : `✅ Το αρχείο ανέβηκε με επιτυχία! ${data.transactions?.length || 0} συναλλαγές εξήχθησαν.`
+      );
+      loadDashboard();
+    }, 1000);
+
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    clearInterval(progressInterval);
+    document.getElementById('uploadProgress').style.display = 'none';
+    alert(`${state.language === 'en' ? 'Upload failed' : 'Το ανέβασμα απέτυχε'}: ${error.message}`);
+  }
+}
+
+function updateProgressBar(percent) {
+  const bar = document.getElementById('progressBar');
+  if (bar) {
+    bar.style.width = percent + '%';
+  }
+  const status = document.getElementById('uploadStatus');
+  if (status) {
+    status.textContent = `${Math.round(percent)}% ${state.language === 'en' ? 'Complete' : 'Ολοκληρώθηκε'}`;
+  }
+}
+
+function displayFilePreview(data) {
+  const preview = document.getElementById('previewData');
+  if (!preview) return;
+
+  const transactions = data.transactions || [];
+  
+  if (transactions.length === 0) {
+    preview.innerHTML = '<span style="color: #9CA3AF;">No transactions to preview</span>';
+    return;
+  }
+
+  // Show first 10 transactions
+  const previewTxns = transactions.slice(0, 10);
+  let html = `<div style="color: #10b981; margin-bottom: 10px;">✅ Preview (showing ${previewTxns.length} of ${transactions.length})</div>`;
+  
+  previewTxns.forEach((txn, idx) => {
+    html += `
+      <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #1F2937;">
+        <div><strong>#${idx + 1}</strong> - ${txn.date}</div>
+        <div style="color: #FFB800;">📝 ${txn.description}</div>
+        <div>
+          <span style="color: ${txn.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+            ${txn.type}: €${(txn.amount || 0).toFixed(2)}
+          </span>
+          | Category: ${txn.category_code || 'N/A'}
+          | Confidence: ${((txn.confidence || 0) * 100).toFixed(0)}%
+        </div>
+      </div>
+    `;
+  });
+
+  preview.innerHTML = html;
+  document.getElementById('previewContainer').style.display = 'block';
+}
+
+async function loadRecentUploads() {
+  try {
+    console.log('📋 Loading recent uploads...');
+    const response = await fetch(`${API_BASE}/files/uploads`);
+    
+    if (!response.ok) {
+      console.warn('Could not load uploads list');
+      return;
+    }
+
+    const uploads = await response.json();
+    console.log('✅ Loaded', uploads.length, 'uploads');
+
+    const tbody = document.getElementById('uploadsBody');
+    if (!tbody) return;
+
+    if (uploads.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align: center; padding: 20px; color: #9CA3AF;">
+            ${state.language === 'en' ? 'No uploads yet' : 'Δεν υπάρχουν αναβάσματα ακόμη'}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = uploads.map((upload, idx) => `
+      <tr>
+        <td>${upload.fileName || upload.file_name || 'Unknown'}</td>
+        <td>${upload.fileType || upload.file_type || 'CSV'}</td>
+        <td>
+          ${upload.status === 'completed' ? '✅ Completed' : 
+            upload.status === 'processing' ? '⏳ Processing' : 
+            upload.status === 'failed' ? '❌ Failed' : upload.status}
+        </td>
+        <td>${upload.transactionCount || upload.transaction_count || 0}</td>
+        <td>
+          ${upload.status === 'completed' ? `
+            <button onclick="viewUploadDetails('${upload.id || idx}')" class="btn-small" style="padding: 4px 8px; font-size: 12px;">
+              ${state.language === 'en' ? 'View' : 'Προβολή'}
+            </button>
+          ` : '-'}
+        </td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.warn('⚠️ Could not load uploads:', error.message);
+  }
+}
+
+function viewUploadDetails(uploadId) {
+  console.log('Viewing upload:', uploadId);
+  changePage('transactions');
+}
+
+// Load uploads when page loads
+function initializeUploadPage() {
+  if (state.currentPage === 'upload') {
+    setTimeout(() => {
+      loadRecentUploads();
+    }, 100);
+  }
+}
+
+
+
+function renderTransactions() {
+  return `
+    <div>
+      <!-- Filters -->
+      <div class="filters-container">
+        <input type="date" id="filterDateFrom" placeholder="${t('transactions.from')}">
+        <input type="date" id="filterDateTo" placeholder="${t('transactions.to')}">
+        <input type="text" id="filterSearch" placeholder="${t('transactions.search')}...">
+        <button onclick="applyFilters()" class="btn-primary">Filter</button>
+      </div>
+      
+      <div class="table-container">
+        <table id="transactionsTable" class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Amount</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="txnBody">
+            <tr><td colspan="6">${t('common.loading')}</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   `;
@@ -506,276 +1271,584 @@ function renderUpload() {
   `;
 }
 
-function renderReports() {
-  const totalIncome = state.transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = state.transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
-  const categoryBreakdown = {};
-  
-  state.transactions.forEach(txn => {
-    const catCode = txn.categoryCode || txn.category || 'UNCATEGORIZED';
-    
-    if (!categoryBreakdown[catCode]) {
-      categoryBreakdown[catCode] = { count: 0, total: 0 };
-    }
-    
-    categoryBreakdown[catCode].count++;
-    categoryBreakdown[catCode].total += txn.amount;
-  });
-  
-  // Log for debugging
-  console.log('Category Breakdown:', categoryBreakdown);
-  console.log('Total categories:', Object.keys(categoryBreakdown).length);
 
-  return `
-    <div>
-      <div class="dashboard-grid">
-        <div class="card">
-          <div class="card-title">${t('reports.monthlyIncome')}</div>
-          <div class="card-value" style="color: var(--accent-green);">${formatCurrency(totalIncome)}</div>
-        </div>
-        <div class="card">
-          <div class="card-title">${t('reports.monthlyExpenses')}</div>
-          <div class="card-value" style="color: var(--accent-red);">${formatCurrency(totalExpenses)}</div>
-        </div>
-        <div class="card">
-          <div class="card-title">${t('reports.netCashFlow')}</div>
-          <div class="card-value" style="color: var(--accent-gold);">${formatCurrency(totalIncome - totalExpenses)}</div>
-        </div>
-      </div>
 
-      <div class="chart-container">
-        <div class="chart-title">${t('reports.categoryBreakdown')}</div>
-        <canvas id="categoryChart"></canvas>
-      </div>
 
-      <div class="card">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">${t('reports.categoryBreakdown')}</h3>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <tbody>
-                  ${Object.entries(categoryBreakdown).length === 0 ? `
-                    <tr>
-                      <td colspan="4" style="text-align: center; padding: 20px; color: var(--text-secondary);">
-                        No category data available
-                      </td>
-                    </tr>
-                  ` : Object.entries(categoryBreakdown).map(([code, data]) => `
-                    <tr>
-                      <td>${getCategoryName(code)}</td>
-                      <td>${data.count}</td>
-                      <td>${formatCurrency(data.total / data.count)}</td>
-                      <td>${formatCurrency(data.total)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-               
-              </tr>
-            </thead>
-            <tbody>
-              ${Object.entries(categoryBreakdown).map(([code, data]) => `
-                <tr>
-                  <td>${getCategoryName(code)}</td>
-                  <td>${data.count}</td>
-                  <td>${formatCurrency(data.total / data.count)}</td>
-                  <td>${formatCurrency(data.total)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-        <button class="btn-primary" style="margin-top: 15px;" onclick="exportToCSV()">${t('reports.exportCSV')}</button>
-      </div>
-    </div>
-  `;
-}
+// ========================================
+// EVENT HANDLERS
+// ========================================
 
-function renderCategories() {
-  return `
-    <div>
-      <h3 style="margin-bottom: 15px; font-weight: 300;">Credit Categories</h3>
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-bottom: 30px;">
-        ${categories.credit.map(cat => `
-          <div class="card">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-              <i class="mdi ${cat.icon}" style="font-size: 24px; color: var(--accent-green);"></i>
-              <div>
-                <div style="font-weight: 400;">${state.language === 'el' ? cat.name_el : cat.name_en}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${cat.code}</div>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-
-      <h3 style="margin-bottom: 15px; font-weight: 300;">Debit Categories</h3>
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
-        ${categories.debit.map(cat => `
-          <div class="card">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-              <i class="mdi ${cat.icon}" style="font-size: 24px; color: var(--accent-red);"></i>
-              <div>
-                <div style="font-weight: 400;">${state.language === 'el' ? cat.name_el : cat.name_en}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">${cat.code}</div>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
-// Event Handlers
-function attachLoginEvents() {
-  const form = document.getElementById('loginForm');
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    
-    if (email === 'demo@smartledger.gr' && password === 'demo123') {
-      state.isLoggedIn = true;
-      state.currentUser = { id: 'usr_001', email: email, fullName: 'Dimitris Papadopoulos', company: 'Demo Company LLC' };
-      state.currentPage = 'dashboard';
-      
-      // Save to localStorage
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
-      
-      // Load transactions
-      loadTransactionsFromDB();
-      
-      render();
-    } else {
-      document.getElementById('loginError').textContent = 'Invalid credentials';
-    }
-  });
-}
-
-function attachMainEvents() {
-  // Will attach specific events as needed
-}
-
-function navigateTo(page) {
+function changePage(page) {
   state.currentPage = page;
+  
+  if (page === 'dashboard') {
+    loadDashboard();
+  } else if (page === 'accounts') {
+    loadAccounts().then(() => {
+      renderAccountsTable();
+    });
+  } else if (page === 'predictions') {
+    loadPredictions().then(() => renderPredictionsTable());
+  } else if (page === 'reports') {
+    render();
+    // Load reports data after render
+    setTimeout(() => {
+      loadReportsData();
+    }, 100);
+  } else if (page === 'ledger') {
+    loadAccounts().then(() => {
+      loadAccountLedger(state.selectedAccount);
+      renderLedgerTable();
+    });
+  }
+  
   render();
 }
 
-function toggleLanguage() {
-  state.language = state.language === 'en' ? 'el' : 'en';
-  localStorage.setItem('language', state.language);
-  render();
+
+
+function getPageTitle() {
+  const titles = {
+    dashboard: t('nav.dashboard'),
+    transactions: t('nav.transactions'),
+    accounts: t('nav.accounts'),
+    reports: t('nav.reports'),
+    ledger: t('nav.ledger'),
+    predictions: t('nav.predictions'),
+    upload: t('nav.upload')
+  };
+  return titles[state.currentPage] || 'Dashboard';
 }
 
 function logout() {
   state.isLoggedIn = false;
   state.currentUser = null;
-  state.currentPage = 'login';
-  state.transactions = [];
-  
-  // Clear localStorage
   localStorage.removeItem('isLoggedIn');
   localStorage.removeItem('currentUser');
-  
   render();
 }
 
-function filterTransactions() {
-  return state.transactions.filter(txn => {
-    const matchesDate = true;
-    
-    const matchesCategory = !state.filters.category || 
-                           txn.categoryCode === state.filters.category || 
-                           txn.category === state.filters.category;
-    
-    const matchesType = state.filters.type === 'all' || 
-                       txn.type === state.filters.type;
-    
-    // Make amount filter optional - only apply if explicitly set
-    const matchesAmount = (state.filters.amountMax === 5000 && state.filters.amountMin === 0) ||
-                         (Math.abs(txn.amount) >= state.filters.amountMin && 
-                          Math.abs(txn.amount) <= state.filters.amountMax);
-    
-    const matchesSearch = !state.filters.search || 
-      txn.description.toLowerCase().includes(state.filters.search.toLowerCase()) || 
-      (txn.counterparty && txn.counterparty.toLowerCase().includes(state.filters.search.toLowerCase()));
-    
-    return matchesDate && matchesCategory && matchesType && matchesAmount && matchesSearch;
-  });
+// ========================================
+// ACCOUNT FUNCTIONS
+// ========================================
+
+function showCreateAccountModal() {
+  document.getElementById('createAccountModal').classList.add('show');
 }
 
+async function createAccount(event) {
+  event.preventDefault();
+  
+  try {
+    const accountData = {
+      account_name: document.getElementById('accountName').value,
+      account_number: document.getElementById('accountNumber').value,
+      account_type: document.getElementById('accountType').value,
+      currency: 'EUR',
+      opening_balance: parseFloat(document.getElementById('openingBalance').value)
+    };
 
-function updateFilters() {
-  state.filters.category = document.getElementById('filterCategory')?.value || null;
-  state.filters.type = document.getElementById('filterType')?.value || 'all';
-  state.filters.search = document.getElementById('filterSearch')?.value || '';
-  
-  // Update amount filters
-  const amountMin = document.getElementById('filterAmountMin')?.value;
-  const amountMax = document.getElementById('filterAmountMax')?.value;
-  
-  state.filters.amountMin = amountMin ? parseFloat(amountMin) : 0;
-  state.filters.amountMax = amountMax ? parseFloat(amountMax) : 1000000;
-  
-  state.currentTransactionPage = 1;
-  render();
+    const response = await fetch(endpoints.accounts, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(accountData)
+    });
+
+    if (response.ok) {
+      console.log('✅ Account created');
+      document.getElementById('createAccountForm').reset();
+      closeModal('createAccountModal');
+      loadAccounts().then(() => renderAccountsTable());
+    }
+  } catch (error) {
+    console.error('❌ Error creating account:', error);
+  }
 }
 
-function editTransaction(id) {
-  const txn = state.transactions.find(t => t.id === id);
-  if (!txn) return;
-
-  const categoryOptions = [...categories.credit, ...categories.debit].map(cat => `
-    <option value="${cat.code}" ${(txn.categoryCode || txn.category) === cat.code ? 'selected' : ''}>${state.language === 'el' ? cat.name_el : cat.name_en}</option>
+function renderAccountsTable() {
+  const tbody = document.getElementById('accountsBody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = state.accounts.map(a => `
+    <tr>
+      <td>${a.account_name}</td>
+      <td>${a.account_number}</td>
+      <td>${a.account_type}</td>
+      <td>${formatCurrency(a.current_balance)}</td>
+      <td>
+        <button class="action-btn" onclick="viewAccountLedger('${a.id}')">View Ledger</button>
+      </td>
+    </tr>
   `).join('');
+}
 
-  const modal = document.createElement('div');
-  modal.className = 'modal show';
-  modal.innerHTML = `
-    <div class="modal-content">
-      <div class="modal-header">
-        <span>${t('common.edit')} ${t('transactions.transaction')}</span>
-        <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
-      </div>
-      <div class="modal-body">
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">${t('transactions.description')}</label>
-          <input type="text" value="${txn.description}" disabled style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-        </div>
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">${t('transactions.amount')}</label>
-          <input type="text" value="${formatCurrency(txn.amount)}" disabled style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-        </div>
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">${t('transactions.category')}</label>
-          <select id="editCategory" style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-            ${categoryOptions}
-          </select>
-        </div>
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">${t('transactions.confidence')}</label>
-          <input type="text" value="${(txn.confidence * 100).toFixed(0)}%" disabled style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="this.closest('.modal').remove()">${t('common.cancel')}</button>
-        <button class="btn-primary" onclick="saveTransaction('${id}', '${modal.id}')">${t('common.save')}</button>
-      </div>
+function viewAccountLedger(accountId) {
+  state.selectedAccount = accountId;
+  changePage('ledger');
+}
+
+function renderLedgerTable() {
+  setTimeout(() => {
+    const tbody = document.getElementById('ledgerBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = state.ledger.map(entry => `
+      <tr>
+        <td>${formatDate(entry.entry_date)}</td>
+        <td>${entry.description}</td>
+        <td>${entry.entry_type === 'DEBIT' ? formatCurrency(entry.amount) : '-'}</td>
+        <td>${entry.entry_type === 'CREDIT' ? formatCurrency(entry.amount) : '-'}</td>
+        <td>${formatCurrency(entry.running_balance)}</td>
+        <td>${entry.reconciled ? '✓' : '-'}</td>
+      </tr>
+    `).join('');
+  }, 100);
+}
+
+// ========================================
+// CHART FUNCTIONS
+// ========================================
+
+function renderDashboardCharts() {
+  setTimeout(() => {
+    // Cash Flow Chart
+    const cashFlowCtx = document.getElementById('cashFlowChart');
+    if (cashFlowCtx && state.reports.cashFlow?.length > 0) {
+      const data = state.reports.cashFlow.slice(-6);
+      new Chart(cashFlowCtx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => d.period),
+          datasets: [
+            {
+              label: 'Income',
+              data: data.map(d => d.total_income),
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Expenses',
+              data: data.map(d => d.total_expenses),
+              borderColor: '#ef4444',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              tension: 0.4
+            }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+    
+    // Recurring List
+    const recurringList = document.getElementById('recurringList');
+    if (recurringList && state.reports.recurring?.length > 0) {
+      recurringList.innerHTML = `
+        <table style="width: 100;">
+          ${state.reports.recurring.slice(0, 5).map(r => `
+            <tr style="padding: 10px; border-bottom: 1px solid #1f2937;">
+              <td>${r.description}</td>
+              <td style="text-align: right;">${r.occurrence_count}x</td>
+              <td style="text-align: right;">${formatCurrency(r.avg_amount)}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+    
+    // Recent Transactions
+    const recentBody = document.getElementById('recentBody');
+    if (recentBody && state.reports.topTxns?.length > 0) {
+      recentBody.innerHTML = state.reports.topTxns.slice(0, 5).map(t => `
+        <tr>
+          <td>${formatDate(t.date)}</td>
+          <td>${t.description}</td>
+          <td>${formatCurrency(t.amount)}</td>
+          <td class="type-${t.type.toLowerCase()}">${t.type}</td>
+        </tr>
+      `).join('');
+    }
+  }, 100);
+}
+
+function renderReportsCharts() {
+  setTimeout(() => {
+    // Category Chart
+    const categoryCtx = document.getElementById('categoryChart');
+    if (categoryCtx) {
+      const categories = state.reports.summary || [];
+      new Chart(categoryCtx, {
+        type: 'pie',
+        data: {
+          labels: categories.length > 0 ? ['Income', 'Expenses'] : [],
+          datasets: [{
+            data: categories.length > 0 ? [
+              state.reports.summary?.credit_total || 0,
+              state.reports.summary?.debit_total || 0
+            ] : [],
+            backgroundColor: ['#10b981', '#ef4444']
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+  }, 100);
+}
+
+function renderPredictionsTable() {
+  setTimeout(() => {
+    const tbody = document.getElementById('predictionsBody');
+    if (!tbody || !state.predictions.forecast) return;
+    
+    tbody.innerHTML = state.predictions.forecast.map(f => `
+      <tr>
+        <td>${f.month}</td>
+        <td>${formatCurrency(f.predicted_income)}</td>
+        <td>${formatCurrency(f.predicted_expenses)}</td>
+        <td style="color: ${f.net_flow >= 0 ? '#10b981' : '#ef4444'}">${formatCurrency(f.net_flow)}</td>
+        <td>${(f.confidence * 100).toFixed(0)}%</td>
+      </tr>
+    `).join('');
+    
+    // Forecast Chart
+    const forecastCtx = document.getElementById('forecastChart');
+    if (forecastCtx && state.predictions.forecast?.length > 0) {
+      new Chart(forecastCtx, {
+        type: 'bar',
+        data: {
+          labels: state.predictions.forecast.map(d => d.month),
+          datasets: [
+            { label: 'Income', data: state.predictions.forecast.map(d => d.predicted_income), backgroundColor: '#10b981' },
+            { label: 'Expenses', data: state.predictions.forecast.map(d => d.predicted_expenses), backgroundColor: '#ef4444' }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+  }, 100);
+}
+
+// ========================================
+// ATTACH EVENT HANDLERS
+// ========================================
+
+function attachLoginEvents() {
+  const form = document.getElementById('loginForm');
+  const langSelect = document.getElementById('langSelect');
+  
+  if (form) {
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorDiv = document.getElementById('errorMessage');
+      
+      // Simple validation
+      if (!username || !password) {
+        errorDiv.textContent = state.language === 'en' 
+          ? 'Please enter username and password' 
+          : 'Παρακαλώ εισαγάγετε όνομα χρήστη και κωδικό πρόσβασης';
+        return;
+      }
+      
+      // Demo login (any username/password works, but we show demo)
+      if (username === 'demo' && password === 'demo') {
+        console.log('✅ Login successful');
+        state.isLoggedIn = true;
+        state.currentUser = { 
+          username, 
+          role: 'user',
+          loginTime: new Date().toLocaleString()
+        };
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+        errorDiv.textContent = '';
+        
+        // Redirect to dashboard
+        setTimeout(() => {
+          render();
+          loadDashboard();
+        }, 500);
+      } else {
+        errorDiv.textContent = state.language === 'en' 
+          ? 'Invalid credentials. Use demo/demo' 
+          : 'Μη έγκυρα διαπιστευτήρια. Χρησιμοποιήστε demo/demo';
+        console.error('❌ Login failed');
+      }
+    };
+  }
+}
+
+
+
+function attachMainEvents() {
+  if (state.currentPage === 'dashboard') {
+    renderDashboardCharts();
+  }
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.remove('show');
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadArea').classList.add('dragover');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadArea').classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) uploadFile(files);
+}
+
+function handleFileSelect(e) {
+  const files = e.target.files;
+  if (files.length > 0) uploadFile(files);
+}
+
+// ========================================
+// FILE UPLOAD - WORKING VERSION
+// ========================================
+
+async function uploadFile(file) {
+  if (!file) {
+    console.error('No file provided');
+    return;
+  }
+
+  try {
+    console.log('📤 Upload starting');
+    console.log('📋 File:', file.name);
+    
+    // Create upload entry in state
+    const uploadId = 'upload_' + Date.now();
+    state.uploads.push({
+      id: uploadId,
+      fileName: file.name,
+      fileType: file.type,
+      status: 'uploading',
+      transactionCount: 0,
+      transactions: [],
+      error: null
+    });
+
+    // Show progress
+    const progressContainer = document.getElementById('uploadProgress');
+    if (progressContainer) {
+      progressContainer.style.display = 'block';
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    console.log('📨 Sending to backend...');
+
+    const response = await fetch('http://localhost:5001/api/files/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    console.log('📊 Response status:', response.status);
+
+    const data = await response.json();
+    console.log('📊 Response data:', data);
+
+    // Find upload entry
+    const idx = state.uploads.findIndex(u => u.id === uploadId);
+    
+    if (idx === -1) {
+      console.error('❌ Upload not found');
+      alert('Error: Upload not found');
+      if (progressContainer) progressContainer.style.display = 'none';
+      return;
+    }
+
+    if (!response.ok) {
+      console.error('❌ Backend error:', data.error);
+      state.uploads[idx].status = 'failed';
+      state.uploads[idx].error = data.error || 'Unknown error';
+      render();
+      if (progressContainer) progressContainer.style.display = 'none';
+      alert('❌ Failed: ' + data.error);
+      return;
+    }
+
+    if (data.success && data.transactions) {
+      console.log('✅ Upload successful');
+      
+      state.uploads[idx].status = 'completed';
+      state.uploads[idx].transactionCount = data.transactionCount || data.transactions.length;
+      state.uploads[idx].transactions = data.transactions;
+      state.uploads[idx].analysis = data.analysis;
+      state.uploads[idx].summary = data.summary;
+      
+      // Map transactions correctly
+      const mappedTransactions = data.transactions.map(txn => ({
+        id: txn.id,
+        date: txn.date,
+        description: txn.description,
+        amount: txn.amount,
+        type: txn.type,
+        category: txn.categoryCode,
+        categoryCode: txn.categoryCode,
+        confidence: txn.confidence,
+        counterparty: txn.counterparty || '',
+        reasoning: txn.reasoning || ''
+      }));
+      
+      state.transactions.push(...mappedTransactions);
+      
+      // Show preview
+      displayFilePreview(state.uploads[idx]);
+      
+      // Hide progress
+      if (progressContainer) progressContainer.style.display = 'none';
+      
+      render();
+      
+      const msg = state.language === 'en'
+        ? `✅ Success: ${data.transactionCount || data.transactions.length} transactions imported`
+        : `✅ Επιτυχία: ${data.transactionCount || data.transactions.length} συναλλαγές εισήχθησαν`;
+      
+      alert(msg);
+      
+      // Load dashboard to refresh
+      setTimeout(() => loadDashboard(), 1000);
+      
+    } else {
+      console.error('❌ Invalid response:', data);
+      state.uploads[idx].status = 'failed';
+      state.uploads[idx].error = 'Invalid response';
+      render();
+      if (progressContainer) progressContainer.style.display = 'none';
+      alert('Invalid response from server');
+    }
+
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    
+    if (progressContainer) progressContainer.style.display = 'none';
+    
+    const idx = state.uploads.findIndex(u => u.fileName === file.name);
+    if (idx !== -1) {
+      state.uploads[idx].status = 'failed';
+      state.uploads[idx].error = error.message;
+      render();
+    }
+    
+    alert('Error: ' + error.message);
+  }
+
+  // Reset file input
+  const fileInput = document.getElementById('fileInput');
+  if (fileInput) fileInput.value = '';
+}
+
+function displayFilePreview(upload) {
+  console.log('🔍 Displaying preview for:', upload.fileName);
+  
+  const previewContainer = document.getElementById('previewContainer');
+  if (!previewContainer) return;
+
+  if (!upload.transactions || upload.transactions.length === 0) {
+    console.warn('⚠️ No transactions to preview');
+    return;
+  }
+
+  const previewData = document.getElementById('previewData');
+  if (!previewData) return;
+
+  // Show first 10 transactions
+  const previewTxns = upload.transactions.slice(0, 10);
+  
+  let html = `
+    <div style="color: #10b981; margin-bottom: 15px; font-weight: 600;">
+      ✅ Preview (showing ${previewTxns.length} of ${upload.transactions.length})
     </div>
   `;
-  modal.id = 'editModal_' + id;
-  document.body.appendChild(modal);
+  
+  previewTxns.forEach((txn, idx) => {
+    const categoryName = getCategoryName(txn.categoryCode);
+    html += `
+      <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #1F2937;">
+        <div style="font-weight: 600; margin-bottom: 4px;">#${idx + 1} - ${txn.date}</div>
+        <div style="color: #FFB800; margin-bottom: 4px;">📝 ${txn.description}</div>
+        <div style="font-size: 12px;">
+          <span style="color: ${txn.type === 'CREDIT' ? '#10b981' : '#ef4444'}; font-weight: 600;">
+            ${txn.type}: €${(txn.amount || 0).toFixed(2)}
+          </span>
+          | <span style="color: #9CA3AF;">Category: ${categoryName}</span>
+          | <span style="color: #9CA3AF;">Confidence: ${((txn.confidence || 0) * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+    `;
+  });
+
+  previewData.innerHTML = html;
+  previewContainer.style.display = 'block';
 }
 
-function saveTransaction(id, modalId) {
-  const txn = state.transactions.find(t => t.id === id);
-  if (txn) {
-    txn.categoryCode = document.getElementById('editCategory').value;
-    txn.category = txn.categoryCode;
+
+
+function getCategoryName(categoryCode) {
+  const categories = {
+    'INVOICE_PAYMENT_FULL': state.language === 'en' ? 'Invoice Payment (Full)' : 'Πληρωμή Τιμολογίου (Πλήρης)',
+    'INVOICE_PAYMENT_PARTIAL': state.language === 'en' ? 'Invoice Payment (Partial)' : 'Πληρωμή Τιμολογίου (Μερική)',
+    'SUPPLIER_PAYMENT': state.language === 'en' ? 'Supplier Payment' : 'Πληρωμή Προμηθευτή',
+    'BANK_FEES': state.language === 'en' ? 'Bank Fees' : 'Τραπεζικά Τέλη',
+    'TAX_PAYMENT': state.language === 'en' ? 'Tax Payment' : 'Καταβολή Φόρου',
+    'PAYROLL': state.language === 'en' ? 'Payroll' : 'Μισθοδοσία',
+    'RENT': state.language === 'en' ? 'Rent' : 'Ενοίκιο',
+    'UTILITIES': state.language === 'en' ? 'Utilities' : 'Κοινόχρηστα',
+    'LOAN_REPAYMENT': state.language === 'en' ? 'Loan Repayment' : 'Αποπληρωμή Δανείου',
+    'ATM_WITHDRAWAL': state.language === 'en' ? 'ATM Withdrawal' : 'Ανάληψη ΑΤΜ',
+    'CAPITAL_RAISE': state.language === 'en' ? 'Capital Raise' : 'Αύξηση Κεφαλαίου',
+    'INTEREST_INCOME': state.language === 'en' ? 'Interest Income' : 'Έσοδα Τόκων',
+    'LOAN_RECEIVED': state.language === 'en' ? 'Loan Received' : 'Λήψη Δανείου',
+  };
+  
+  return categories[categoryCode] || categoryCode;
+}
+
+// File handlers
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    handleFileSelect({ target: { files } });
   }
-  document.getElementById(modalId).remove();
+}
+
+
+// ========================================
+// INITIALIZATION
+// ========================================
+
+function init() {
+  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  if (isLoggedIn) {
+    state.isLoggedIn = true;
+    state.currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    loadDashboard();
+  }
   render();
 }
 
@@ -1031,54 +2104,5 @@ function previewUpload(uploadId) {
   document.body.appendChild(modal);
 }
 
-function importTransactions(uploadId) {
-  alert('Transactions already imported from this file!');
-  document.getElementById('previewModal')?.remove();
-}
-
-function sortTransactions(field) {
-  // Add sorting logic
-}
-
-function previousPage() {
-  if (state.currentTransactionPage > 1) {
-    state.currentTransactionPage--;
-    render();
-  }
-}
-
-function nextPage() {
-  const filteredTxn = filterTransactions();
-  const totalPages = Math.ceil(filteredTxn.length / state.transactionsPerPage);
-  if (state.currentTransactionPage < totalPages) {
-    state.currentTransactionPage++;
-    render();
-  }
-}
-
-function exportToCSV() {
-  const headers = ['Date', 'Description', 'Amount', 'Type', 'Category', 'Confidence', 'Counterparty'];
-  const rows = state.transactions.map(t => [
-    t.date,
-    t.description,
-    t.amount,
-    t.type,
-    getCategoryName(t.categoryCode || t.category),
-    (t.confidence * 100).toFixed(0) + '%',
-    t.counterparty
-  ]);
-
-  const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'transactions.csv';
-  a.click();
-}
-
-// ========================================
-// FIX 3: Initialize on page load
-// ========================================
-checkSession();
-render();
+// Check language on load
+window.addEventListener('DOMContentLoaded', init);
