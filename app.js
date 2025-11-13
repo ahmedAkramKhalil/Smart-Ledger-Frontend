@@ -41,8 +41,8 @@ const state = {
 // API ENDPOINTS
 // ========================================
 
-const API_BASE = 'http://localhost:5001/api';
-
+// const API_BASE = 'http://localhost:5001/api';
+const API_BASE = 'http://127.0.0.1:5001/api';
 const endpoints = {
   // Reports
   dashboard: `${API_BASE}/reports/dashboard`,
@@ -1650,7 +1650,7 @@ async function uploadFile(file) {
 
     console.log('📨 Sending to backend...');
 
-    const response = await fetch('http://localhost:5001/api/files/upload', {
+    const response = await fetch('http://127.0.0.1:5001/api/files/upload', {
       method: 'POST',
       body: formData
     });
@@ -1914,7 +1914,7 @@ async function uploadFile(file, uploadId) {
 
     console.log('Sending to backend...');
 
-    const response = await fetch('http://localhost:5001/api/files/upload', {
+    const response = await fetch('http://127.0.0.1:5001/api/files/upload', {
       method: 'POST',
       body: formData
     });
