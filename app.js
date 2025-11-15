@@ -1574,81 +1574,78 @@ function render() {
 
 function renderLogin() {
   return `
-    <div class="login-container">
-      <div class="login-box">
-        <div class="login-logo">📊 Smart Ledger</div>
-        <h1 class="login-title">${t('common.login')}</h1>
+    <div class="login-container" style="display: flex; align-items: center; min-height: 100vh; background: linear-gradient(120deg, #1F2937, #121820 90%); justify-content: center;">
+      <div class="login-box" style="background: #181F29; box-shadow: 0 12px 32px rgba(17,24,39,0.25); border-radius: 18px; padding: 40px 30px; max-width: 350px; width: 100%;">
+        <div class="login-logo" style="font-size: 2.2rem; text-align: center; font-weight: bold; color: #FFB800; margin-bottom: 12px;">Ai Smart Ledger</div>
+        <h2 class="login-title" style="text-align: center; color: #E5E7EB; font-weight: 800; font-size: 1.5rem; margin-bottom: 18px;">
+          ${t('common.login')}
+        </h2>
         
-        <form id="loginForm">
-          <!-- Language Selector at Top -->
-          <div class="form-group" style="margin-bottom: 20px; display: flex; gap: 10px;">
-            <label style="flex: 1;">${t('common.language')}:</label>
-            <div style="flex: 2; display: flex; gap: 5px;">
-              <button 
-                type="button" 
-                class="lang-btn ${state.language === 'en' ? 'lang-btn-active' : ''}"
-                onclick="setLanguage('en')"
-                style="flex: 1; padding: 8px; background-color: ${state.language === 'en' ? '#FFB800' : '#1F2937'}; color: ${state.language === 'en' ? '#000' : '#E5E7EB'}; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
-                🇬🇧 EN
-              </button>
-              <button 
-                type="button" 
-                class="lang-btn ${state.language === 'el' ? 'lang-btn-active' : ''}"
-                onclick="setLanguage('el')"
-                style="flex: 1; padding: 8px; background-color: ${state.language === 'el' ? '#FFB800' : '#1F2937'}; color: ${state.language === 'el' ? '#000' : '#E5E7EB'}; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
-                🇬🇷 EL
-              </button>
-            </div>
+        <form id="loginForm" autocomplete="on">
+          <!-- Language Selector -->
+          <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 22px;">
+            <button 
+              type="button" 
+              class="lang-btn${state.language === 'en' ? ' lang-btn-active' : ''}"
+              onclick="setLanguage('en')"
+              style="padding: 8px 18px; background: ${state.language === 'en' ? '#FFB800' : '#262C37'}; color: ${state.language === 'en' ? '#111928' : '#E5E7EB'}; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; transition: background 0.2s;">
+              🇬🇧 EN
+            </button>
+            <button 
+              type="button" 
+              class="lang-btn${state.language === 'el' ? ' lang-btn-active' : ''}"
+              onclick="setLanguage('el')"
+              style="padding: 8px 18px; background: ${state.language === 'el' ? '#FFB800' : '#262C37'}; color: ${state.language === 'el' ? '#111928' : '#E5E7EB'}; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; transition: background 0.2s;">
+              🇬🇷 EL
+            </button>
           </div>
 
-          <hr style="border: none; border-top: 1px solid #1F2937; margin: 20px 0;">
-
           <!-- Demo Account Info -->
-          <div style="background-color: #1F2937; border-left: 4px solid #FFB800; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 12px;">
-            <div style="font-weight: 600; margin-bottom: 5px;">💡 ${state.language === 'en' ? 'Demo Account' : 'Δημο Λογαριασμό'}</div>
-            <div>${state.language === 'en' ? 'Username: ' : 'Όνομα χρήστη: '}<strong>demo</strong></div>
-            <div>${state.language === 'en' ? 'Password: ' : 'Κωδικός: '}<strong>demo</strong></div>
+          <div style="background: #222C37; border-left: 5px solid #FFB800; border-radius: 7px; padding: 13px 14px; margin-bottom: 23px; color: #FFB800;">
+            <div style="font-weight: 700; letter-spacing: 0.2px; font-size: 12.5px; margin-bottom: 6px;">
+              💡 ${state.language === 'en' ? 'Demo Account' : 'Δημο Λογαριασμό'}
+            </div>
+            <div style="color: #FFD98D;">${state.language === 'en' ? 'Username:' : 'Όνομα χρήστη:'} <strong>demo</strong></div>
+            <div style="color: #FFD98D;">${state.language === 'en' ? 'Password:' : 'Κωδικός:'} <strong>demo</strong></div>
           </div>
 
           <!-- Username Field -->
-          <div class="form-group">
-            <label>${state.language === 'en' ? 'Username' : 'Όνομα Χρήστη'}:</label>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label for="username" style="color: #E5E7EB; font-weight: 500; font-size: 14px; margin-bottom: 6px; display: block;">
+              ${state.language === 'en' ? 'Username' : 'Όνομα Χρήστη'}:
+            </label>
             <input 
-              type="text" 
-              id="username" 
-              required 
-              value="demo"
-              placeholder="demo"
-              style="width: 100%; padding: 12px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB; font-size: 14px;">
+              type="text" id="username" value="demo" required placeholder="demo"
+              autocomplete="username"
+              style="width: 100%; padding: 13px; border-radius: 8px; border: 1.5px solid #293043; background: #1D232D; color: #F7FAFC; font-size: 15px; font-weight: 500; margin-top: 2px;">
           </div>
 
           <!-- Password Field -->
-          <div class="form-group">
-            <label>${state.language === 'en' ? 'Password' : 'Κωδικός'}:</label>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label for="password" style="color: #E5E7EB; font-weight: 500; font-size: 14px; margin-bottom: 6px; display: block;">
+              ${state.language === 'en' ? 'Password' : 'Κωδικός'}:
+            </label>
             <input 
-              type="password" 
-              id="password" 
-              required 
-              value="demo"
-              placeholder="demo"
-              style="width: 100%; padding: 12px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB; font-size: 14px;">
+              type="password" id="password" value="demo" required placeholder="demo"
+              autocomplete="current-password"
+              style="width: 100%; padding: 13px; border-radius: 8px; border: 1.5px solid #293043; background: #1D232D; color: #F7FAFC; font-size: 15px; font-weight: 500; margin-top: 2px;">
           </div>
 
-          <!-- Login Button -->
           <button 
-            type="submit" 
-            class="login-btn"
-            style="width: 100%; padding: 12px; margin-top: 20px; background-color: #FFB800; color: #000; border: none; border-radius: 6px; font-weight: 600; font-size: 16px; cursor: pointer; transition: all 0.3s;">
+            type="submit"
+            style="width: 100%; padding: 13px; margin-top: 18px; background: linear-gradient(90deg,#FFB800 70%, #FFD98D 100%); box-shadow: 0 2px 10px #FFB80055; color: #181F29; font-weight: 700; font-size: 17px; border: none; border-radius: 8px; letter-spacing: 0.2px; cursor: pointer; transition: background 0.2s, color 0.2s;">
             ${state.language === 'en' ? '🔐 Login' : '🔐 Σύνδεση'}
           </button>
 
           <!-- Error Message -->
-          <div id="errorMessage" class="error-message" style="margin-top: 15px; color: #ef4444; text-align: center; font-size: 14px;"></div>
+          <div id="errorMessage" style="margin-top: 14px; color: #ef4444; text-align: center; font-size: 15px;"></div>
 
           <!-- Footer Info -->
-          <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #9CA3AF;">
-            <div>${state.language === 'en' ? 'Smart Ledger v2.0' : 'Smart Ledger v2.0'}</div>
-            <div>${state.language === 'en' ? 'AI-Powered Financial Dashboard' : 'Πίνακας Χρηματοοικονομικών Δεδομένων Με Ενισχυμένη Τεχνητή Νοημοσύνη'}</div>
+          <div style="text-align: center; margin-top: 22px; font-size: 12.5px; color: #A4B0BC;">
+            <div>Smart Ledger v2.0</div>
+            <div>${state.language === 'en'
+              ? 'AI-Powered Financial Dashboard'
+              : 'Πίνακας Χρηματοοικονομικών Δεδομένων Με Ενισχυμένη Τεχνητή Νοημοσύνη'}</div>
           </div>
         </form>
       </div>
