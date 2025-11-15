@@ -936,3 +936,61 @@ canvas {
 .table tr:hover {
   background-color: #121820;
 }
+/* Chart containers - Fixed heights */
+.chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
+
+canvas {
+  max-height: 300px !important;
+  height: 300px !important;
+}
+
+/* Specific chart heights */
+#cashFlowChart,
+#categoryChart,
+#monthlyChart,
+#forecastChart {
+  max-height: 250px !important;
+  height: 250px !important;
+}
+
+/* Prevent infinite chart expansion */
+.card canvas {
+  max-height: 300px !important;
+  width: 100% !important;
+}
+
+/* Chart wrapper */
+.chart-wrapper {
+  position: relative;
+  height: 300px;
+  width: 100%;
+  overflow: hidden;
+}
+
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+

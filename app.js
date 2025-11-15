@@ -15,8 +15,8 @@ const state = {
   reports: {},
   predictions: [],
   ledger: [],
-  uploads: [],           // ← CRITICAL: Add this
-  categories: [],        // ← Add if missing
+  uploads: [],
+  categories: [],
   
   // Filters
   filters: {
@@ -30,9 +30,16 @@ const state = {
     accountId: null
   },
   
+  // Pagination
+  pagination: {
+    transactions: { currentPage: 1, itemsPerPage: 10, totalItems: 0 },
+    accounts: { currentPage: 1, itemsPerPage: 10, totalItems: 0 },
+    ledger: { currentPage: 1, itemsPerPage: 10, totalItems: 0 },
+    predictions: { currentPage: 1, itemsPerPage: 10, totalItems: 0 },
+    uploads: { currentPage: 1, itemsPerPage: 10, totalItems: 0 }
+  },
+  
   // UI State
-  currentTransactionPage: 1,
-  transactionsPerPage: 10,
   editingTransaction: null,
   selectedAccount: 'acc_default_001'
 };
@@ -52,7 +59,8 @@ const endpoints = {
   topTransactions: `${API_BASE}/reports/top-transactions`,
   reconciliation: `${API_BASE}/reports/reconciliation-status`,
   monthlyComparison: `${API_BASE}/reports/monthly-comparison`,
-  
+  dateRange: `${API_BASE}/reports/date-range`, // NEW: Add this line
+
   // Predictions
   recurring: `${API_BASE}/reports/recurring`,
   forecast: `${API_BASE}/reports/forecast/cash-flow`,
@@ -217,12 +225,400 @@ function changeLanguage(lang) {
 
 
 
+// ========================================
+// PAGINATION & FILTERING UTILITIES
+// ========================================
+
+function filterData(data, filters) {
+  return data.filter(item => {
+    // Date filter
+    if (filters.dateFrom && item.date < filters.dateFrom) return false;
+    if (filters.dateTo && item.date > filters.dateTo) return false;
+    
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const description = (item.description || '').toLowerCase();
+      const counterparty = (item.counterparty || '').toLowerCase();
+      if (!description.includes(searchLower) && !counterparty.includes(searchLower)) {
+        return false;
+      }
+    }
+    
+    // Type filter
+    if (filters.type && filters.type !== 'all') {
+      if (item.type !== filters.type) return false;
+    }
+    
+    // Category filter
+    if (filters.category && filters.category !== 'all') {
+      if (item.categoryCode !== filters.category) return false;
+    }
+    
+    // Amount filter
+    if (filters.amountMin && Math.abs(item.amount) < filters.amountMin) return false;
+    if (filters.amountMax && Math.abs(item.amount) > filters.amountMax) return false;
+    
+    // Account filter
+    if (filters.accountId && filters.accountId !== 'all') {
+      if (item.account_id !== filters.accountId) return false;
+    }
+    
+    return true;
+  });
+}
+
+function paginateData(data, page, itemsPerPage) {
+  const start = (page - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  return data.slice(start, end);
+}
+
+function getTotalPages(totalItems, itemsPerPage) {
+  return Math.ceil(totalItems / itemsPerPage);
+}
+
+function renderPagination(tableType, totalItems) {
+  const pagination = state.pagination[tableType];
+  const totalPages = getTotalPages(totalItems, pagination.itemsPerPage);
+  
+  if (totalPages <= 1) return '';
+  
+  return `
+    <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; padding: 15px; background-color: var(--bg-card); border-radius: 8px;">
+      
+      <button 
+        onclick="changePaginationPage('${tableType}', ${pagination.currentPage - 1})" 
+        ${pagination.currentPage === 1 ? 'disabled' : ''}
+        style="padding: 8px 12px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); cursor: pointer;">
+        ← Previous
+      </button>
+      
+      <span style="color: var(--text-secondary); font-size: 14px;">
+        Page ${pagination.currentPage} of ${totalPages}
+      </span>
+      
+      <select 
+        onchange="changeItemsPerPage('${tableType}', this.value)"
+        style="padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+        <option value="10" ${pagination.itemsPerPage === 10 ? 'selected' : ''}>10 per page</option>
+        <option value="25" ${pagination.itemsPerPage === 25 ? 'selected' : ''}>25 per page</option>
+        <option value="50" ${pagination.itemsPerPage === 50 ? 'selected' : ''}>50 per page</option>
+        <option value="100" ${pagination.itemsPerPage === 100 ? 'selected' : ''}>100 per page</option>
+      </select>
+      
+      <button 
+        onclick="changePaginationPage('${tableType}', ${pagination.currentPage + 1})" 
+        ${pagination.currentPage === totalPages ? 'disabled' : ''}
+        style="padding: 8px 12px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); cursor: pointer;">
+        Next →
+      </button>
+      
+      <span style="color: var(--text-secondary); font-size: 12px;">
+        (${totalItems} total items)
+      </span>
+    </div>
+  `;
+}
+
+function changePaginationPage(tableType, newPage) {
+  const pagination = state.pagination[tableType];
+  const totalPages = getTotalPages(pagination.totalItems, pagination.itemsPerPage);
+  
+  if (newPage < 1 || newPage > totalPages) return;
+  
+  pagination.currentPage = newPage;
+  
+  // Re-render the appropriate table
+  switch(tableType) {
+    case 'transactions':
+      renderTransactionsTable();
+      break;
+    case 'accounts':
+      renderAccountsTable();
+      break;
+    case 'ledger':
+      renderLedgerTable();
+      break;
+    case 'predictions':
+      renderPredictionsTable();
+      break;
+    case 'uploads':
+      loadRecentUploads();
+      break;
+  }
+}
+
+function changeItemsPerPage(tableType, newItemsPerPage) {
+  state.pagination[tableType].itemsPerPage = parseInt(newItemsPerPage);
+  state.pagination[tableType].currentPage = 1; // Reset to first page
+  changePaginationPage(tableType, 1);
+}
+
+function applyFilters() {
+  // Get filter values
+  state.filters.dateFrom = document.getElementById('filterDateFrom')?.value || null;
+  state.filters.dateTo = document.getElementById('filterDateTo')?.value || null;
+  state.filters.search = document.getElementById('filterSearch')?.value || '';
+  state.filters.type = document.getElementById('filterType')?.value || 'all';
+  state.filters.category = document.getElementById('filterCategory')?.value || 'all';
+  state.filters.accountId = document.getElementById('filterAccount')?.value || 'all';
+  
+  // Reset to page 1
+  state.pagination.transactions.currentPage = 1;
+  
+  // Re-render table
+  renderTransactionsTable();
+}
+
+function clearFilters() {
+  // Reset filters
+  state.filters = {
+    dateFrom: null,
+    dateTo: null,
+    category: null,
+    type: 'all',
+    amountMin: 0,
+    amountMax: 1000000,
+    search: '',
+    accountId: null
+  };
+  
+  // Clear UI
+  if (document.getElementById('filterDateFrom')) document.getElementById('filterDateFrom').value = '';
+  if (document.getElementById('filterDateTo')) document.getElementById('filterDateTo').value = '';
+  if (document.getElementById('filterSearch')) document.getElementById('filterSearch').value = '';
+  if (document.getElementById('filterType')) document.getElementById('filterType').value = 'all';
+  if (document.getElementById('filterCategory')) document.getElementById('filterCategory').value = 'all';
+  if (document.getElementById('filterAccount')) document.getElementById('filterAccount').value = 'all';
+  
+  // Reset pagination
+  state.pagination.transactions.currentPage = 1;
+  
+  // Re-render
+  renderTransactionsTable();
+}
+
+// Update summary cards without re-rendering entire page
+function updateSummaryCards(summary) {
+  console.log('💳 Updating summary cards:', summary);
+  // Cards are rendered in HTML, we could update them here if needed
+  // For now, they update on full render
+}
+
+// Update category table
+function updateCategoryTable(categoryData) {
+  const categoryBody = document.getElementById('categoryBody');
+  if (!categoryBody) return;
+  
+  if (categoryData.length === 0) {
+    categoryBody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 40px;">
+          <div style="font-size: 48px; margin-bottom: 15px;">📂</div>
+          <p style="color: #9CA3AF;">No categories found</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  const creditCategories = categoryData.filter(c => c.category_type === 'CREDIT');
+  const debitCategories = categoryData.filter(c => c.category_type === 'DEBIT');
+  
+  const creditGrandTotal = creditCategories.reduce((sum, c) => sum + Math.abs(c.total_amount || 0), 0);
+  const debitGrandTotal = debitCategories.reduce((sum, c) => sum + Math.abs(c.total_amount || 0), 0);
+  
+  let tableHTML = '';
+  
+  // Render Credit Categories
+  if (creditCategories.length > 0) {
+    tableHTML += `
+      <tr style="background-color: rgba(16, 185, 129, 0.1);">
+        <td colspan="7" style="font-weight: 700; padding: 12px; color: #10b981;">
+          💰 ${state.language === 'en' ? 'INCOME CATEGORIES' : 'ΚΑΤΗΓΟΡΙΕΣ ΕΙΣΟΔΗΜΑΤΟΣ'}
+        </td>
+      </tr>
+    `;
+    
+    creditCategories.forEach((c, index) => {
+      const amount = Math.abs(c.total_amount || 0);
+      const percentage = creditGrandTotal > 0 ? (amount / creditGrandTotal * 100) : 0;
+      
+      tableHTML += `
+        <tr style="border-left: 3px solid #10b981;">
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '📌'}</span>
+              <div>
+                <div style="font-weight: 600;">${state.language === 'en' ? c.name_en : c.name_el}</div>
+                <div style="font-size: 11px; color: #6B7280;">${c.code}</div>
+              </div>
+            </div>
+          </td>
+          <td><span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: rgba(16, 185, 129, 0.2); color: #10b981;">💰 CREDIT</span></td>
+          <td style="text-align: right;"><span style="padding: 4px 8px; background-color: rgba(255, 184, 0, 0.1); border-radius: 4px; color: #FFB800; font-weight: 600;">${c.transaction_count || 0}</span></td>
+          <td style="text-align: right;">
+            <div style="font-weight: 700; font-size: 15px; color: #10b981;">${formatCurrency(amount)}</div>
+            <div style="font-size: 11px; color: #6B7280; margin-top: 2px;">${percentage.toFixed(1)}% of income</div>
+          </td>
+          <td style="text-align: right; color: #9CA3AF;">${formatCurrency(c.average_amount || 0)}</td>
+          <td style="text-align: right; color: #6B7280; font-size: 12px;">${formatCurrency(c.min_amount || 0)}</td>
+          <td style="text-align: right; color: #6B7280; font-size: 12px;">${formatCurrency(c.max_amount || 0)}</td>
+        </tr>
+      `;
+    });
+  }
+  
+  // Render Debit Categories
+  if (debitCategories.length > 0) {
+    tableHTML += `
+      <tr style="background-color: rgba(239, 68, 68, 0.1);">
+        <td colspan="7" style="font-weight: 700; padding: 12px; color: #ef4444;">
+          💸 ${state.language === 'en' ? 'EXPENSE CATEGORIES' : 'ΚΑΤΗΓΟΡΙΕΣ ΕΞΟΔΩΝ'}
+        </td>
+      </tr>
+    `;
+    
+    debitCategories.forEach((c, index) => {
+      const amount = Math.abs(c.total_amount || 0);
+      const percentage = debitGrandTotal > 0 ? (amount / debitGrandTotal * 100) : 0;
+      
+      tableHTML += `
+        <tr style="border-left: 3px solid #ef4444;">
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '📌'}</span>
+              <div>
+                <div style="font-weight: 600;">${state.language === 'en' ? c.name_en : c.name_el}</div>
+                <div style="font-size: 11px; color: #6B7280;">${c.code}</div>
+              </div>
+            </div>
+          </td>
+          <td><span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: rgba(239, 68, 68, 0.2); color: #ef4444;">💸 DEBIT</span></td>
+          <td style="text-align: right;"><span style="padding: 4px 8px; background-color: rgba(255, 184, 0, 0.1); border-radius: 4px; color: #FFB800; font-weight: 600;">${c.transaction_count || 0}</span></td>
+          <td style="text-align: right;">
+            <div style="font-weight: 700; font-size: 15px; color: #ef4444;">${formatCurrency(amount)}</div>
+            <div style="font-size: 11px; color: #6B7280; margin-top: 2px;">${percentage.toFixed(1)}% of expenses</div>
+          </td>
+          <td style="text-align: right; color: #9CA3AF;">${formatCurrency(c.average_amount || 0)}</td>
+          <td style="text-align: right; color: #6B7280; font-size: 12px;">${formatCurrency(c.min_amount || 0)}</td>
+          <td style="text-align: right; color: #6B7280; font-size: 12px;">${formatCurrency(c.max_amount || 0)}</td>
+        </tr>
+      `;
+    });
+  }
+  
+  categoryBody.innerHTML = tableHTML;
+}
+
+// Update transaction summary table
+function updateTransactionSummaryTable(categoryData) {
+  const summaryBody = document.getElementById('transactionSummaryBody');
+  if (!summaryBody) return;
+  
+  if (categoryData.length === 0) {
+    summaryBody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 40px;">
+          <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
+          <p style="color: #9CA3AF;">No transaction data available</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  const creditData = categoryData.filter(c => c.category_type === 'CREDIT');
+  const debitData = categoryData.filter(c => c.category_type === 'DEBIT');
+  
+  const creditCount = creditData.reduce((sum, c) => sum + (c.transaction_count || 0), 0);
+  const debitCount = debitData.reduce((sum, c) => sum + (c.transaction_count || 0), 0);
+  
+  const creditTotal = creditData.reduce((sum, c) => sum + Math.abs(c.total_amount || 0), 0);
+  const debitTotal = debitData.reduce((sum, c) => sum + Math.abs(c.total_amount || 0), 0);
+  
+  const totalCount = creditCount + debitCount;
+  const totalAmount = creditTotal + debitTotal;
+  
+  summaryBody.innerHTML = `
+    <tr style="background-color: rgba(16, 185, 129, 0.05);">
+      <td><span style="padding: 6px 12px; border-radius: 6px; font-weight: 600; background-color: rgba(16, 185, 129, 0.2); color: #10b981;">💰 ${state.language === 'en' ? 'Income (CREDIT)' : 'Εισόδημα (ΠΙΣΤΩΣΗ)'}</span></td>
+      <td style="text-align: right; font-weight: 600;">${creditCount}</td>
+      <td style="text-align: right; font-weight: 700; font-size: 15px; color: #10b981;">${formatCurrency(creditTotal)}</td>
+      <td style="text-align: right; color: #9CA3AF;">${creditCount > 0 ? formatCurrency(creditTotal / creditCount) : '€0.00'}</td>
+      <td style="text-align: right;"><span style="padding: 4px 10px; border-radius: 4px; background-color: rgba(16, 185, 129, 0.1); color: #10b981; font-weight: 600;">${totalCount > 0 ? ((creditCount / totalCount) * 100).toFixed(1) : 0}%</span></td>
+    </tr>
+    <tr style="background-color: rgba(239, 68, 68, 0.05);">
+      <td><span style="padding: 6px 12px; border-radius: 6px; font-weight: 600; background-color: rgba(239, 68, 68, 0.2); color: #ef4444;">💸 ${state.language === 'en' ? 'Expenses (DEBIT)' : 'Έξοδα (ΧΡΕΩΣΗ)'}</span></td>
+      <td style="text-align: right; font-weight: 600;">${debitCount}</td>
+      <td style="text-align: right; font-weight: 700; font-size: 15px; color: #ef4444;">${formatCurrency(debitTotal)}</td>
+      <td style="text-align: right; color: #9CA3AF;">${debitCount > 0 ? formatCurrency(debitTotal / debitCount) : '€0.00'}</td>
+      <td style="text-align: right;"><span style="padding: 4px 10px; border-radius: 4px; background-color: rgba(239, 68, 68, 0.1); color: #ef4444; font-weight: 600;">${totalCount > 0 ? ((debitCount / totalCount) * 100).toFixed(1) : 0}%</span></td>
+    </tr>
+    <tr style="background-color: rgba(255, 184, 0, 0.05); border-top: 2px solid #FFB800;">
+      <td><span style="padding: 6px 12px; border-radius: 6px; font-weight: 700; background-color: rgba(255, 184, 0, 0.2); color: #FFB800;">📈 ${state.language === 'en' ? 'NET BALANCE' : 'ΚΑΘΑΡΟ ΥΠΟΛΟΙΠΟ'}</span></td>
+      <td style="text-align: right; font-weight: 700;">${totalCount}</td>
+      <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${(creditTotal - debitTotal) >= 0 ? '#10b981' : '#ef4444'};">${formatCurrency(creditTotal - debitTotal)}</td>
+      <td style="text-align: right; color: #9CA3AF;">${totalCount > 0 ? formatCurrency(totalAmount / totalCount) : '€0.00'}</td>
+      <td style="text-align: right; font-weight: 600; color: #FFB800;">100%</td>
+    </tr>
+  `;
+}
+
 async function loadReportsData() {
   try {
     console.log('📊 Loading reports data...');
     
-    const dateFrom = document.getElementById('reportDateFrom')?.value;
-    const dateTo = document.getElementById('reportDateTo')?.value;
+    const dateFromInput = document.getElementById('reportDateFrom');
+    const dateToInput = document.getElementById('reportDateTo');
+
+    // SMART DEFAULT: Get last month with data from database
+    if (dateFromInput && dateToInput && !dateFromInput.value && !dateToInput.value) {
+      console.log('📅 No dates set, fetching available date range...');
+      
+      try {
+        const dateRangeResponse = await fetch(endpoints.dateRange);
+        const dateRange = await dateRangeResponse.json();
+        
+        console.log('📅 Date range from database:', dateRange);
+        
+        if (dateRange.hasData && dateRange.suggested_start && dateRange.suggested_end) {
+          // Use the suggested range (last month with data)
+          dateFromInput.value = dateRange.suggested_start;
+          dateToInput.value = dateRange.suggested_end;
+          
+          console.log('✅ Set date range to last month with data:', {
+            from: dateRange.suggested_start,
+            to: dateRange.suggested_end,
+            transactions: dateRange.total_transactions
+          });
+        } else {
+          // Fallback to current month if no data
+          const today = new Date();
+          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+          const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+          
+          dateFromInput.value = firstDay.toISOString().split('T')[0];
+          dateToInput.value = lastDay.toISOString().split('T')[0];
+          
+          console.log('⚠️ No data in database, using current month as fallback');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching date range:', error);
+        
+        // Fallback to current month on error
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        dateFromInput.value = firstDay.toISOString().split('T')[0];
+        dateToInput.value = lastDay.toISOString().split('T')[0];
+      }
+    }
+
+    const dateFrom = dateFromInput?.value;
+    const dateTo = dateToInput?.value;
 
     const filters = {};
     if (dateFrom) filters.dateFrom = dateFrom;
@@ -230,135 +626,837 @@ async function loadReportsData() {
 
     const queryString = new URLSearchParams(filters).toString();
 
-    const [categoryData, reconcileData] = await Promise.all([
-      fetch(`${endpoints.categoryAnalysis}${queryString ? '?' + queryString : ''}`).then(r => r.json()).catch(e => { console.error('Category error:', e); return []; }),
-      fetch(`${endpoints.reconciliation}${queryString ? '?' + queryString : ''}`).then(r => r.json()).catch(e => { console.error('Reconcile error:', e); return []; })
+    console.log('📥 Fetching reports with filters:', filters);
+
+    // Fetch fresh data
+    const [summary, categoryData, cashFlowData] = await Promise.all([
+      fetch(`${endpoints.dashboard}${queryString ? '?' + queryString : ''}`)
+        .then(r => r.json())
+        .catch(e => { console.error('Summary error:', e); return {}; }),
+      fetch(`${endpoints.categoryAnalysis}${queryString ? '?' + queryString : ''}`)
+        .then(r => r.json())
+        .catch(e => { console.error('Category error:', e); return []; }),
+      fetch(`${endpoints.cashFlow}${queryString ? '?' + queryString : ''}`)
+        .then(r => r.json())
+        .catch(e => { console.error('Cash flow error:', e); return []; })
     ]);
 
-    // Update category table
-    const categoryBody = document.getElementById('categoryBody');
-    if (categoryBody && categoryData.length > 0) {
-      categoryBody.innerHTML = categoryData.map(c => `
-        <tr>
-          <td>${state.language === 'en' ? c.name_en : c.name_el}</td>
-          <td><span style="background-color: ${c.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; padding: 4px 8px; border-radius: 4px; color: ${c.type === 'CREDIT' ? '#10b981' : '#ef4444'};">${c.type}</span></td>
-          <td>${c.transaction_count || 0}</td>
-          <td>${formatCurrency(c.total_amount || 0)}</td>
-          <td>${formatCurrency(c.average_amount || 0)}</td>
-        </tr>
-      `).join('');
-    }
+    console.log('✅ Fresh data received:', {
+      summary: !!summary,
+      categoryCount: categoryData.length,
+      cashFlowCount: cashFlowData.length
+    });
 
-    // Update reconciliation table
-    const reconcileBody = document.getElementById('reconcileBody');
-    if (reconcileBody && reconcileData.length > 0) {
-      reconcileBody.innerHTML = reconcileData.map(r => `
-        <tr>
-          <td>${r.status}</td>
-          <td>${r.count || 0}</td>
-          <td>${formatCurrency(r.total_amount || 0)}</td>
-          <td>${r.percentage ? r.percentage.toFixed(1) : 0}%</td>
-        </tr>
-      `).join('');
-    }
+    // Update summary cards in DOM directly
+    updateSummaryCards(summary);
+    
+    // Update tables
+    updateCategoryTable(categoryData);
+    updateTransactionSummaryTable(categoryData);
+    
+    // Draw charts with FRESH data
+    setTimeout(() => {
+      drawReportsCharts(categoryData, cashFlowData);
+      updateChartDateRangeLabels();
+      showDataRangeInfo(); 
 
-    // Draw charts
-    drawReportsCharts(categoryData);
-
-    console.log('✅ Reports loaded');
+    }, 100);
+    
+    console.log('✅ Reports rendered successfully');
   } catch (error) {
     console.error('❌ Error loading reports:', error);
+    alert('Failed to load reports: ' + error.message);
+  }
+}
+// NEW: Update date range labels on all charts
+function updateChartDateRangeLabels() {
+  const dateFrom = document.getElementById('reportDateFrom')?.value;
+  const dateTo = document.getElementById('reportDateTo')?.value;
+  
+  let dateRangeText = '';
+  if (dateFrom && dateTo) {
+    const start = new Date(dateFrom);
+    const end = new Date(dateTo);
+    
+    const startFormatted = start.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: start.getFullYear() !== end.getFullYear() ? 'numeric' : undefined
+    });
+    
+    const endFormatted = end.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    
+    dateRangeText = `${startFormatted} - ${endFormatted}`;
+  } else if (!dateFrom && !dateTo) {
+    dateRangeText = state.language === 'en' ? 'All Time' : 'Όλος ο Χρόνος';
+  }
+  
+  // Update all chart labels
+  ['cashFlowDateRange', 'categoryDateRange', 'monthlyDateRange', 'topCatDateRange'].forEach(id => {
+    const elem = document.getElementById(id);
+    if (elem) elem.textContent = dateRangeText;
+  });
+}
+
+
+// NEW: Populate month selector with available months
+function populateMonthSelector(cashFlowData) {
+  const select = document.getElementById('cashFlowMonthSelect');
+  if (!select || !cashFlowData || cashFlowData.length === 0) return;
+  
+  // Extract unique months from cash flow data
+  const months = [...new Set(cashFlowData.map(d => {
+    // Extract YYYY-MM from period (handles different formats)
+    if (d.period.length === 10) {
+      // Daily format: YYYY-MM-DD
+      return d.period.substring(0, 7);
+    } else if (d.period.includes('W')) {
+      // Weekly format: YYYY-W##
+      return d.period.split('-W')[0] + '-01'; // Approximate to first month
+    } else {
+      // Monthly format: YYYY-MM
+      return d.period;
+    }
+  }))].sort().reverse(); // Most recent first
+  
+  console.log('📅 Available months:', months);
+  
+  // Keep existing options and add months
+  const latestOption = select.querySelector('option[value="latest"]');
+  const allOption = select.querySelector('option[value="all"]');
+  
+  // Remove old month options
+  const oldOptions = select.querySelectorAll('option[data-month]');
+  oldOptions.forEach(opt => opt.remove());
+  
+  // Add month options
+  months.forEach(month => {
+    const option = document.createElement('option');
+    option.value = month;
+    option.setAttribute('data-month', 'true');
+    
+    // Format display: "November 2024"
+    const [year, monthNum] = month.split('-');
+    const date = new Date(year, parseInt(monthNum) - 1);
+    option.textContent = date.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', {
+      year: 'numeric',
+      month: 'long'
+    });
+    
+    select.appendChild(option);
+  });
+  
+  // Set to latest month by default
+  if (months.length > 0) {
+    select.value = 'latest';
   }
 }
 
-function drawReportsCharts(categoryData) {
+// NEW: Update cash flow chart based on selected month
+async function updateCashFlowChart() {
+  const select = document.getElementById('cashFlowMonthSelect');
+  if (!select) return;
+  
+  const selectedMonth = select.value;
+  console.log('📊 Updating cash flow chart for:', selectedMonth);
+  
+  let filteredData = state.reports.cashFlowData || [];
+  
+  if (selectedMonth === 'latest') {
+    // Get the latest month with data
+    const latestPeriod = filteredData[filteredData.length - 1]?.period || '';
+    const latestMonth = latestPeriod.substring(0, 7);
+    
+    // Filter to show only that month's daily data
+    filteredData = filteredData.filter(d => d.period.startsWith(latestMonth));
+    
+    console.log('📅 Latest month:', latestMonth, 'Data points:', filteredData.length);
+    
+  } else if (selectedMonth !== 'all') {
+    // Filter to specific month
+    filteredData = filteredData.filter(d => d.period.startsWith(selectedMonth));
+    
+    console.log('📅 Selected month:', selectedMonth, 'Data points:', filteredData.length);
+  }
+  // If 'all', use all data (no filtering)
+  
+  // Re-draw the cash flow chart with filtered data
+}
+
+// NEW: Draw cash flow chart with specific data
+function drawCashFlowChart(cashFlowData) {
+  const cashFlowLineCtx = document.getElementById('cashFlowLineChart');
+  if (!cashFlowLineCtx) return;
+  
+  // Destroy existing chart
+  if (window.cashFlowLineChartInstance) {
+    window.cashFlowLineChartInstance.destroy();
+  }
+
+  if (!cashFlowData || cashFlowData.length === 0) {
+    cashFlowLineCtx.parentElement.innerHTML = `
+      <div style="text-align: center; padding: 60px 20px;">
+        <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
+        <p style="color: #9CA3AF; margin-bottom: 10px;">
+          ${state.language === 'en' ? 'No cash flow data for selected period' : 'Δεν υπάρχουν δεδομένα για την επιλεγμένη περίοδο'}
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  try {
+    // Format labels based on period type
+    const labels = cashFlowData.map(d => {
+      if (d.period.length === 10) {
+        // Daily format: show "Nov 15" or "15"
+        const date = new Date(d.period);
+        return date.getDate().toString(); // Just show day number
+      } else if (d.period.includes('W')) {
+        // Weekly format
+        const weekNum = d.period.split('W')[1];
+        return 'W' + weekNum;
+      } else {
+        // Monthly format
+        const [year, month] = d.period.split('-');
+        const date = new Date(year, parseInt(month) - 1);
+        return date.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', { 
+          month: 'short' 
+        });
+      }
+    });
+
+    console.log('📊 Drawing chart with', cashFlowData.length, 'data points');
+
+    window.cashFlowLineChartInstance = new Chart(cashFlowLineCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: state.language === 'en' ? 'Income' : 'Εισόδημα',
+            data: cashFlowData.map(d => Math.abs(d.total_income || 0)),
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            tension: 0.3,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: '#10b981',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          },
+          {
+            label: state.language === 'en' ? 'Expenses' : 'Έξοδα',
+            data: cashFlowData.map(d => Math.abs(d.total_expenses || 0)),
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            tension: 0.3,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: '#ef4444',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { 
+              color: '#E5E7EB', 
+              padding: 10,
+              font: { size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            padding: 12,
+            callbacks: {
+              title: function(tooltipItems) {
+                const index = tooltipItems[0].dataIndex;
+                const fullDate = cashFlowData[index].period;
+                // Show full date in tooltip
+                if (fullDate.length === 10) {
+                  const date = new Date(fullDate);
+                  return date.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                }
+                return fullDate;
+              },
+              label: function(context) {
+                return context.dataset.label + ': €' + context.parsed.y.toFixed(2);
+              },
+              footer: function(tooltipItems) {
+                const income = tooltipItems[0]?.parsed.y || 0;
+                const expense = tooltipItems[1]?.parsed.y || 0;
+                const net = income - expense;
+                return '\n' + (state.language === 'en' ? 'Net: ' : 'Καθαρό: ') + 
+                       '€' + net.toFixed(2);
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { 
+              color: '#9CA3AF',
+              callback: value => '€' + value.toLocaleString()
+            },
+            grid: { 
+              color: '#1F2937',
+              drawBorder: false
+            }
+          },
+          x: {
+            ticks: { 
+              color: '#9CA3AF',
+              maxRotation: 45,
+              minRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 31
+            },
+            grid: { 
+              color: '#1F2937',
+              drawBorder: false
+            }
+          }
+        }
+      }
+    });
+    
+    console.log('✅ Cash flow chart created');
+    
+  } catch (error) {
+    console.error('❌ Cash flow chart error:', error);
+  }
+}
+
+
+
+
+function renderReportsSummary(summary) {
+  // This updates the summary cards when filters change
+  // The cards are already in the HTML, we just need to update values
+  console.log('📊 Updating summary cards:', summary);
+  
+  // If you want to dynamically update the cards after filter
+  // you can select them and update innerHTML
+  // For now, re-render the page
+  render();
+  
+  // Then re-load charts
   setTimeout(() => {
-    // Category Pie Chart
+    if (state.reports.categoryData && state.reports.cashFlowData) {
+      drawReportsCharts(state.reports.categoryData, state.reports.cashFlowData);
+    }
+  }, 300);
+}
+
+
+
+function drawReportsCharts(categoryData, cashFlowData) {
+  setTimeout(() => {
+    console.log('🎨 Drawing all report charts...');
+    console.log('📊 Received data:', {
+      categoryCount: categoryData?.length || 0,
+      cashFlowCount: cashFlowData?.length || 0
+    });
+    
+    // Check Chart.js
+    if (typeof Chart === 'undefined') {
+      console.error('❌ Chart.js not loaded!');
+      return;
+    }
+
+    // ========================================
+    // 1. CASH FLOW LINE CHART
+    // ========================================
+    const cashFlowLineCtx = document.getElementById('cashFlowLineChart');
+    if (cashFlowLineCtx) {
+      // Destroy old chart
+      if (window.cashFlowLineChartInstance) {
+        window.cashFlowLineChartInstance.destroy();
+      }
+
+      if (cashFlowData && cashFlowData.length > 0) {
+        try {
+          const dataPointCount = cashFlowData.length;
+          let showEveryNth = 1;
+          
+          if (dataPointCount > 31) {
+            showEveryNth = Math.ceil(dataPointCount / 20);
+          }
+          
+          const labels = cashFlowData.map((d, index) => {
+            if (index % showEveryNth !== 0) return '';
+            
+            if (d.period.length === 10) {
+              const date = new Date(d.period);
+              return date.getDate().toString();
+            } else if (d.period.includes('W')) {
+              const weekNum = d.period.split('W')[1];
+              return 'W' + weekNum;
+            } else {
+              const [year, month] = d.period.split('-');
+              const date = new Date(year, parseInt(month) - 1);
+              return date.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', { month: 'short' });
+            }
+          });
+
+          window.cashFlowLineChartInstance = new Chart(cashFlowLineCtx, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [
+                {
+                  label: state.language === 'en' ? 'Income' : 'Εισόδημα',
+                  data: cashFlowData.map(d => Math.abs(d.total_income || 0)),
+                  borderColor: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  tension: 0.3,
+                  fill: true,
+                  borderWidth: 2,
+                  pointRadius: dataPointCount > 31 ? 2 : 3,
+                  pointHoverRadius: 5,
+                  pointBackgroundColor: '#10b981',
+                  pointBorderColor: '#fff',
+                  pointBorderWidth: 2
+                },
+                {
+                  label: state.language === 'en' ? 'Expenses' : 'Έξοδα',
+                  data: cashFlowData.map(d => Math.abs(d.total_expenses || 0)),
+                  borderColor: '#ef4444',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  tension: 0.3,
+                  fill: true,
+                  borderWidth: 2,
+                  pointRadius: dataPointCount > 31 ? 2 : 3,
+                  pointHoverRadius: 5,
+                  pointBackgroundColor: '#ef4444',
+                  pointBorderColor: '#fff',
+                  pointBorderWidth: 2
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: {
+                mode: 'index',
+                intersect: false
+              },
+              plugins: {
+                legend: {
+                  position: 'bottom',
+                  labels: { color: '#E5E7EB', padding: 10, font: { size: 12 } }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  padding: 12,
+                  callbacks: {
+                    title: function(tooltipItems) {
+                      const index = tooltipItems[0].dataIndex;
+                      const fullDate = cashFlowData[index].period;
+                      if (fullDate.length === 10) {
+                        const date = new Date(fullDate);
+                        return date.toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', {
+                          weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+                        });
+                      }
+                      return fullDate;
+                    },
+                    label: function(context) {
+                      return context.dataset.label + ': €' + context.parsed.y.toFixed(2);
+                    },
+                    footer: function(tooltipItems) {
+                      const income = tooltipItems[0]?.parsed.y || 0;
+                      const expense = tooltipItems[1]?.parsed.y || 0;
+                      const net = income - expense;
+                      return '\n' + (state.language === 'en' ? 'Net: ' : 'Καθαρό: ') + '€' + net.toFixed(2);
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: { color: '#9CA3AF', callback: value => '€' + value.toLocaleString() },
+                  grid: { color: '#1F2937', drawBorder: false }
+                },
+                x: {
+                  ticks: { color: '#9CA3AF', maxRotation: 45, minRotation: 0, autoSkip: false },
+                  grid: { color: '#1F2937', drawBorder: false }
+                }
+              }
+            }
+          });
+          
+          console.log('✅ Cash flow line chart created');
+          
+        } catch (error) {
+          console.error('❌ Cash flow line chart error:', error);
+          cashFlowLineCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #ef4444;">Error: ' + error.message + '</p>';
+        }
+      } else {
+        cashFlowLineCtx.parentElement.innerHTML = `
+          <div style="text-align: center; padding: 60px 20px;">
+            <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
+            <p style="color: #9CA3AF; margin-bottom: 10px;">
+              ${state.language === 'en' ? 'No cash flow data for selected period' : 'Δεν υπάρχουν δεδομένα ταμειακής ροής'}
+            </p>
+          </div>
+        `;
+      }
+    }
+
+    // ========================================
+    // 2. CATEGORY PIE CHART (Income vs Expenses)
+    // ========================================
     const categoryCtx = document.getElementById('categoryChart');
-    if (categoryCtx && categoryData && categoryData.length > 0) {
-      // Destroy existing chart if any
+    if (categoryCtx) {
+      // Destroy old chart
       if (window.categoryChartInstance) {
         window.categoryChartInstance.destroy();
       }
 
-      const creditTotal = categoryData
-        .filter(c => c.type === 'CREDIT')
-        .reduce((sum, c) => sum + (c.total_amount || 0), 0);
-      
-      const debitTotal = categoryData
-        .filter(c => c.type === 'DEBIT')
-        .reduce((sum, c) => sum + (c.total_amount || 0), 0);
+      if (categoryData && categoryData.length > 0) {
+        // Calculate totals
+        const creditTotal = categoryData.reduce((sum, c) => sum + Math.abs(parseFloat(c.credit_total) || 0), 0);
+        const debitTotal = categoryData.reduce((sum, c) => sum + Math.abs(parseFloat(c.debit_total) || 0), 0);
 
-      window.categoryChartInstance = new Chart(categoryCtx, {
-        type: 'pie',
-        data: {
-          labels: [
-            state.language === 'en' ? 'Income' : 'Εισόδημα',
-            state.language === 'en' ? 'Expenses' : 'Έξοδα'
-          ],
-          datasets: [{
-            data: [creditTotal, debitTotal],
-            backgroundColor: ['#10b981', '#ef4444'],
-            borderColor: '#0F1419',
-            borderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { color: '#E5E7EB' }
-            }
+        console.log('💰 Pie chart totals:', { creditTotal, debitTotal });
+
+        if (creditTotal === 0 && debitTotal === 0) {
+          categoryCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No data</p>';
+        } else {
+          try {
+            window.categoryChartInstance = new Chart(categoryCtx, {
+              type: 'doughnut',
+              data: {
+                labels: [
+                  state.language === 'en' ? 'Income' : 'Εισόδημα',
+                  state.language === 'en' ? 'Expenses' : 'Έξοδα'
+                ],
+                datasets: [{
+                  data: [creditTotal, debitTotal],
+                  backgroundColor: ['#10b981', '#ef4444'],
+                  borderColor: '#0F1419',
+                  borderWidth: 3,
+                  hoverOffset: 10
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'bottom',
+                    labels: { 
+                      color: '#E5E7EB', 
+                      padding: 15,
+                      font: { size: 13 },
+                      generateLabels: function(chart) {
+                        const data = chart.data;
+                        const total = creditTotal + debitTotal;
+                        return data.labels.map((label, i) => {
+                          const value = data.datasets[0].data[i];
+                          const percentage = ((value / total) * 100).toFixed(1);
+                          return {
+                            text: `${label}: €${value.toFixed(2)} (${percentage}%)`,
+                            fillStyle: data.datasets[0].backgroundColor[i],
+                            hidden: false,
+                            index: i
+                          };
+                        });
+                      }
+                    }
+                  },
+                  tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    callbacks: {
+                      label: function(context) {
+                        const label = context.label || '';
+                        const value = context.parsed || 0;
+                        const total = creditTotal + debitTotal;
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${label}: €${value.toFixed(2)} (${percentage}%)`;
+                      }
+                    }
+                  }
+                }
+              }
+            });
+            console.log('✅ Category pie chart created');
+          } catch (error) {
+            console.error('❌ Category chart error:', error);
           }
         }
-      });
+      } else {
+        categoryCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No category data</p>';
+      }
     }
 
-    // Monthly Chart
+    // ========================================
+    // 3. MONTHLY COMPARISON BAR CHART
+    // ========================================
     const monthlyCtx = document.getElementById('monthlyChart');
     if (monthlyCtx) {
+      // Destroy old chart
       if (window.monthlyChartInstance) {
         window.monthlyChartInstance.destroy();
       }
 
-      const monthData = categoryData.slice(0, 12);
-      
-      window.monthlyChartInstance = new Chart(monthlyCtx, {
-        type: 'bar',
-        data: {
-          labels: monthData.map((_, i) => `Month ${i + 1}`),
-          datasets: [
-            {
-              label: state.language === 'en' ? 'Income' : 'Εισόδημα',
-              data: monthData.map(m => m.total_amount || 0),
-              backgroundColor: '#10b981'
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: { color: '#E5E7EB' }
-            }
-          },
-          scales: {
-            y: {
-              ticks: { color: '#9CA3AF' },
-              grid: { color: '#1F2937' }
+      if (cashFlowData && cashFlowData.length > 0) {
+        try {
+          window.monthlyChartInstance = new Chart(monthlyCtx, {
+            type: 'bar',
+            data: {
+              labels: cashFlowData.map(m => m.period),
+              datasets: [
+                {
+                  label: state.language === 'en' ? 'Income' : 'Εισόδημα',
+                  data: cashFlowData.map(m => m.total_income || 0),
+                  backgroundColor: '#10b981'
+                },
+                {
+                  label: state.language === 'en' ? 'Expenses' : 'Έξοδα',
+                  data: cashFlowData.map(m => Math.abs(m.total_expenses || 0)),
+                  backgroundColor: '#ef4444'
+                }
+              ]
             },
-            x: {
-              ticks: { color: '#9CA3AF' },
-              grid: { color: '#1F2937' }
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { labels: { color: '#E5E7EB' } }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: { color: '#9CA3AF' },
+                  grid: { color: '#1F2937' }
+                },
+                x: {
+                  ticks: { color: '#9CA3AF' },
+                  grid: { color: '#1F2937' }
+                }
+              }
             }
+          });
+          console.log('✅ Monthly bar chart created');
+        } catch (error) {
+          console.error('❌ Monthly chart error:', error);
+        }
+      } else {
+        monthlyCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No monthly data</p>';
+      }
+    }
+
+    // ========================================
+    // 4. TOP CATEGORIES BAR CHART
+    // ========================================
+    const topCategoriesCtx = document.getElementById('topCategoriesChart');
+    if (topCategoriesCtx) {
+      // Destroy old chart
+      if (window.topCategoriesChartInstance) {
+        window.topCategoriesChartInstance.destroy();
+      }
+
+      if (categoryData && categoryData.length > 0) {
+        // Get top 5 from each type
+        const topCredits = categoryData
+          .filter(c => c.category_type === 'CREDIT' && c.transaction_count > 0)
+          .sort((a, b) => Math.abs(b.total_amount || 0) - Math.abs(a.total_amount || 0))
+          .slice(0, 5);
+        
+        const topDebits = categoryData
+          .filter(c => c.category_type === 'DEBIT' && c.transaction_count > 0)
+          .sort((a, b) => Math.abs(b.total_amount || 0) - Math.abs(a.total_amount || 0))
+          .slice(0, 5);
+        
+        const topCategories = [...topCredits, ...topDebits]
+          .sort((a, b) => Math.abs(b.total_amount || 0) - Math.abs(a.total_amount || 0))
+          .slice(0, 10);
+
+        console.log('🏆 Top categories:', topCategories.length);
+
+        if (topCategories.length === 0) {
+          topCategoriesCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No category data</p>';
+        } else {
+          try {
+            window.topCategoriesChartInstance = new Chart(topCategoriesCtx, {
+              type: 'bar',
+              data: {
+                labels: topCategories.map(c => state.language === 'en' ? c.name_en : c.name_el),
+                datasets: [{
+                  label: state.language === 'en' ? 'Amount' : 'Ποσό',
+                  data: topCategories.map(c => Math.abs(c.total_amount || 0)),
+                  backgroundColor: topCategories.map(c => c.category_type === 'CREDIT' ? '#10b981' : '#ef4444'),
+                  borderColor: topCategories.map(c => c.category_type === 'CREDIT' ? '#059669' : '#dc2626'),
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    callbacks: {
+                      label: function(context) {
+                        const category = topCategories[context.dataIndex];
+                        return [
+                          (state.language === 'en' ? 'Amount: ' : 'Ποσό: ') + '€' + context.parsed.x.toFixed(2),
+                          (state.language === 'en' ? 'Transactions: ' : 'Συναλλαγές: ') + category.transaction_count,
+                          (state.language === 'en' ? 'Type: ' : 'Τύπος: ') + category.category_type
+                        ];
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  x: {
+                    beginAtZero: true,
+                    ticks: { color: '#9CA3AF', callback: value => '€' + value.toLocaleString() },
+                    grid: { color: '#1F2937' }
+                  },
+                  y: {
+                    ticks: { color: '#9CA3AF', font: { size: 11 } },
+                    grid: { color: '#1F2937' }
+                  }
+                }
+              }
+            });
+            console.log('✅ Top categories chart created');
+          } catch (error) {
+            console.error('❌ Top categories chart error:', error);
           }
         }
-      });
+      } else {
+        topCategoriesCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No category data</p>';
+      }
     }
-  }, 100);
+
+    // ========================================
+    // 5. CATEGORY BREAKDOWN STACKED BAR
+    // ========================================
+    const categoryBreakdownCtx = document.getElementById('categoryBreakdownChart');
+    if (categoryBreakdownCtx) {
+      // Destroy old chart
+      if (window.categoryBreakdownChartInstance) {
+        window.categoryBreakdownChartInstance.destroy();
+      }
+
+      if (categoryData && categoryData.length > 0) {
+        const creditCats = categoryData
+          .filter(c => c.category_type === 'CREDIT' && c.transaction_count > 0)
+          .sort((a, b) => Math.abs(b.total_amount) - Math.abs(a.total_amount))
+          .slice(0, 8);
+          
+        const debitCats = categoryData
+          .filter(c => c.category_type === 'DEBIT' && c.transaction_count > 0)
+          .sort((a, b) => Math.abs(b.total_amount) - Math.abs(a.total_amount))
+          .slice(0, 8);
+        
+        if (creditCats.length === 0 && debitCats.length === 0) {
+          categoryBreakdownCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No category data</p>';
+        } else {
+          try {
+            window.categoryBreakdownChartInstance = new Chart(categoryBreakdownCtx, {
+              type: 'bar',
+              data: {
+                labels: ['Income Categories', 'Expense Categories'],
+                datasets: [
+                  ...creditCats.map((cat, idx) => ({
+                    label: state.language === 'en' ? cat.name_en : cat.name_el,
+                    data: [Math.abs(cat.credit_total || cat.total_amount || 0), 0],
+                    backgroundColor: `hsl(${120 + idx * 20}, 70%, ${50 - idx * 3}%)`,
+                    stack: 'Stack 0'
+                  })),
+                  ...debitCats.map((cat, idx) => ({
+                    label: state.language === 'en' ? cat.name_en : cat.name_el,
+                    data: [0, Math.abs(cat.debit_total || cat.total_amount || 0)],
+                    backgroundColor: `hsl(${0 + idx * 20}, 70%, ${50 - idx * 3}%)`,
+                    stack: 'Stack 1'
+                  }))
+                ]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'right',
+                    labels: { color: '#E5E7EB', padding: 8, font: { size: 10 } }
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: function(context) {
+                        return context.dataset.label + ': €' + context.parsed.y.toFixed(2);
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  x: {
+                    stacked: true,
+                    ticks: { color: '#9CA3AF' },
+                    grid: { color: '#1F2937' }
+                  },
+                  y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: { color: '#9CA3AF', callback: value => '€' + value.toFixed(0) },
+                    grid: { color: '#1F2937' }
+                  }
+                }
+              }
+            });
+            console.log('✅ Category breakdown chart created');
+          } catch (error) {
+            console.error('❌ Category breakdown chart error:', error);
+          }
+        }
+      } else {
+        categoryBreakdownCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No category data</p>';
+      }
+    }
+
+    console.log('✅ All report charts rendered');
+  }, 200);
+}
+
+function exportReports() {
+  alert(state.language === 'en' 
+    ? 'Export functionality coming soon! This will generate a PDF report.' 
+    : 'Η λειτουργία εξαγωγής έρχεται σύντομα! Αυτό θα δημιουργήσει μια αναφορά PDF.');
+  
+  // Future: Implement PDF generation
+  // You can use libraries like jsPDF or pdfmake
 }
 
 
@@ -367,6 +1465,15 @@ async function loadDashboard() {
   try {
     console.log('📊 Loading dashboard data...');
     
+    // Step 1: Load transactions
+    console.log('📥 Fetching transactions...');
+    const transactionsResponse = await fetch(`${API_BASE}/transactions?limit=100`);
+    const transactions = await transactionsResponse.json();
+    state.transactions = transactions;
+    console.log('✅ Loaded', transactions.length, 'transactions');
+    
+    // Step 2: Load all dashboard data
+    console.log('📥 Fetching dashboard data...');
     const [summary, cashFlow, topTxns, recurring] = await Promise.all([
       fetch(endpoints.dashboard).then(r => r.json()),
       fetch(endpoints.cashFlow).then(r => r.json()),
@@ -374,13 +1481,36 @@ async function loadDashboard() {
       fetch(`${endpoints.recurring}?minOccurrences=3`).then(r => r.json())
     ]);
 
+    // Step 3: Store in state
     state.reports = { summary, cashFlow, topTxns, recurring };
-    console.log('✅ Dashboard data loaded');
+    
+    // Step 4: Log what we got
+    console.log('📊 Dashboard data loaded:', {
+      summaryExists: !!summary,
+      cashFlowLength: cashFlow?.length || 0,
+      cashFlowData: cashFlow,
+      topTxnsLength: topTxns?.length || 0,
+      recurringLength: recurring?.length || 0
+    });
+    
+    // Step 5: Render page
+    console.log('🎨 Rendering page...');
     render();
+    
+    // Step 6: Wait for DOM, then render charts
+    console.log('⏳ Waiting for DOM...');
+    setTimeout(() => {
+      console.log('🎨 Rendering charts...');
+      renderDashboardCharts();
+    }, 500);  // Increased delay
+    
   } catch (error) {
     console.error('❌ Error loading dashboard:', error);
+    alert('Failed to load dashboard: ' + error.message);
   }
 }
+
+
 
 async function loadAccounts() {
   try {
@@ -682,33 +1812,51 @@ function renderDashboard() {
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
         <div class="card">
           <h3>${t('reports.cashFlow')}</h3>
-          <canvas id="cashFlowChart"></canvas>
+          <div style="position: relative; height: 300px; width: 100%;">
+            <canvas id="cashFlowChart" style="max-height: 280px;"></canvas>
+          </div>
         </div>
         
         <div class="card">
           <h3>${t('predictions.recurringPatterns')}</h3>
-          <div id="recurringList"></div>
+          <div id="recurringList" style="max-height: 300px; overflow-y: auto;"></div>
         </div>
       </div>
       
-      <!-- Recent Transactions -->
-      <div class="card" style="margin-top: 20px;">
-        <h3>${t('dashboard.recentTransactions')}</h3>
-        <table id="recentTable" class="table" style="width: 100%; margin-top: 15px;">
-          <thead>
-            <tr>
-              <th>${t('transactions.date')}</th>
-              <th>${t('transactions.description')}</th>
-              <th>${t('transactions.amount')}</th>
-              <th>Type</th>
-            </tr>
-          </thead>
-          <tbody id="recentBody">
-            <tr><td colspan="4">${t('common.loading')}</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+<!-- Recent Transactions -->
+<div class="card" style="margin-top: 20px;">
+  <h3>${t('dashboard.recentTransactions')}</h3>
+  <table class="table" style="width: 100%; margin-top: 15px;">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Description</th>
+        <th>Amount</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${state.transactions && state.transactions.length > 0 ? 
+        state.transactions.slice(0, 10).map(t => `
+          <tr>
+            <td>${t.date}</td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${t.description}</td>
+            <td style="text-align: right; color: ${t.type === 'CREDIT' ? '#10b981' : '#ef4444'}; font-weight: 600;">
+              €${Math.abs(t.amount).toFixed(2)}
+            </td>
+            <td>
+              <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; 
+                background-color: ${t.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+                color: ${t.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+                ${t.type}
+              </span>
+            </td>
+          </tr>
+        `).join('') 
+        : '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #9CA3AF;">No transactions yet</td></tr>'}
+    </tbody>
+  </table>
+</div>
   `;
 }
 
@@ -738,6 +1886,7 @@ function renderAccounts() {
             <tr><td colspan="5">${t('common.loading')}</td></tr>
           </tbody>
         </table>
+        <div id="accountsPagination"></div>
       </div>
       
       <div id="createAccountModal" class="modal">
@@ -788,91 +1937,194 @@ function renderAccounts() {
 // ========================================
 
 function renderReports() {
+  const summary = state.reports?.summary || {};
+  
   return `
-    <div style="height: calc(100vh - 80px); overflow-y: auto; padding: 20px;">
+
+  
+    <div style="height: calc(100vh - 100px); overflow-y: auto; padding: 20px;">
       
-      <!-- Title -->
-      <h2 style="margin-bottom: 20px; color: #FFB800;">📊 ${t('nav.reports')}</h2>
-      
-      <!-- Filters Row -->
-      <div class="card" style="margin-bottom: 20px;">
-        <h3>${t('reports.summary')}</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-          <div style="display: flex; flex-direction: column;">
-            <label style="font-size: 12px; color: #9CA3AF; margin-bottom: 5px;">${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}:</label>
-            <input type="date" id="reportDateFrom" style="padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
-          </div>
-          <div style="display: flex; flex-direction: column;">
-            <label style="font-size: 12px; color: #9CA3AF; margin-bottom: 5px;">${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}:</label>
-            <input type="date" id="reportDateTo" style="padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
-          </div>
-          <div style="display: flex; align-items: flex-end;">
-            <button class="btn-primary" onclick="loadReportsData()" style="width: 100%; padding: 8px;">
-              ${state.language === 'en' ? 'Generate Reports' : 'Δημιουργία Αναφορών'}
-            </button>
-          </div>
-        </div>
+      <!-- Page Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; color: #FFB800;">📊 ${t('nav.reports')}</h2>
+        <button 
+          onclick="exportReports()" 
+          class="btn-secondary"
+          style="padding: 8px 16px;">
+          ${state.language === 'en' ? '📥 Export PDF' : '📥 Εξαγωγή PDF'}
+        </button>
       </div>
 
-      <!-- Charts Container - FIXED HEIGHT -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+
+   
+
+
+
+      <!-- Summary Cards -->
+      <div class="dashboard-grid" style="margin-bottom: 25px;">
+        <div class="card card-gold">
+          <div class="card-title">${state.language === 'en' ? 'Total Balance' : 'Συνολικό Υπόλοιπο'}</div>
+          <div class="card-value">€${((summary.credit_total || 0) - Math.abs(summary.debit_total || 0)).toFixed(2)}</div>
+          <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px;">
+            ${summary.total_transactions || 0} ${state.language === 'en' ? 'transactions' : 'συναλλαγές'}
+          </div>
+        </div>
         
-        <!-- Category Chart -->
-        <div class="card" style="height: 350px; display: flex; flex-direction: column;">
-          <h3>${t('reports.categoryAnalysis')}</h3>
-          <div style="flex: 1; position: relative; min-height: 280px;">
-            <canvas id="categoryChart" style="max-height: 250px;"></canvas>
+        <div class="card card-green">
+          <div class="card-title">${state.language === 'en' ? 'Total Income' : 'Συνολικό Εισόδημα'}</div>
+          <div class="card-value">€${(summary.credit_total || 0).toFixed(2)}</div>
+          <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px;">
+            ${summary.total_credits || 0} ${state.language === 'en' ? 'credits' : 'πιστώσεις'}
           </div>
         </div>
-
-        <!-- Monthly Chart -->
-        <div class="card" style="height: 350px; display: flex; flex-direction: column;">
-          <h3>${t('reports.monthlyComparison')}</h3>
-          <div style="flex: 1; position: relative; min-height: 280px;">
-            <canvas id="monthlyChart" style="max-height: 250px;"></canvas>
+        
+        <div class="card card-red">
+          <div class="card-title">${state.language === 'en' ? 'Total Expenses' : 'Συνολικά Έξοδα'}</div>
+          <div class="card-value">€${Math.abs(summary.debit_total || 0).toFixed(2)}</div>
+          <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px;">
+            ${summary.total_debits || 0} ${state.language === 'en' ? 'debits' : 'χρεώσεις'}
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-title">${state.language === 'en' ? 'Net Cash Flow' : 'Καθαρή Ροή'}</div>
+          <div class="card-value" style="color: ${summary.net_flow >= 0 ? '#10b981' : '#ef4444'};">
+            €${(summary.net_flow || 0).toFixed(2)}
+          </div>
+          <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px;">
+            ${summary.reconciled_count || 0} ${state.language === 'en' ? 'reconciled' : 'συμφωνημένες'}
           </div>
         </div>
       </div>
 
-      <!-- Reconciliation Status -->
+      <!-- Filters Section -->
       <div class="card" style="margin-bottom: 20px;">
-        <h3>${t('reports.reconciliation')}</h3>
-        <table class="table" style="width: 100%;">
-          <thead>
-            <tr>
-              <th>${state.language === 'en' ? 'Status' : 'Κατάσταση'}</th>
-              <th>${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
-              <th>${state.language === 'en' ? 'Amount' : 'Ποσό'}</th>
-              <th>${state.language === 'en' ? 'Percentage' : 'Ποσοστό'}</th>
-            </tr>
-          </thead>
-          <tbody id="reconcileBody">
-            <tr>
-              <td colspan="4" style="text-align: center; padding: 20px;">
-                <span style="color: #9CA3AF;">${t('common.loading')}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <h3 style="margin-bottom: 15px; font-weight: 300;">
+          ${state.language === 'en' ? 'Date Range & Filters' : 'Εύρος Ημερομηνιών & Φίλτρα'}
+        </h3>
+        
+        <!-- Quick Date Presets -->
+        <div style="display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;">
+          <button onclick="setReportDateRange('today')" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+            ${state.language === 'en' ? 'Today' : 'Σήμερα'}
+          </button>
+          <button onclick="setReportDateRange('week')" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+            ${state.language === 'en' ? 'This Week' : 'Αυτή την Εβδομάδα'}
+          </button>
+          <button onclick="setReportDateRange('month')" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+            ${state.language === 'en' ? 'This Month' : 'Αυτόν τον Μήνα'}
+          </button>
+          <button onclick="setReportDateRange('quarter')" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+            ${state.language === 'en' ? 'This Quarter' : 'Αυτό το Τρίμηνο'}
+          </button>
+          <button onclick="setReportDateRange('year')" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+            ${state.language === 'en' ? 'This Year' : 'Φέτος'}
+          </button>
+          <button onclick="setReportDateRange('all')" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+            ${state.language === 'en' ? 'All Time' : 'Όλος ο Χρόνος'}
+          </button>
+        </div>
+        
+<!-- Custom Date Range -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+  <div>
+    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+      ${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}
+    </label>
+    <input 
+      type="date" 
+      id="reportDateFrom" 
+      style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+  </div>
+  <div>
+    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+      ${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}
+    </label>
+    <input 
+      type="date" 
+      id="reportDateTo" 
+      style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+  </div>
+  <div style="display: flex; align-items: flex-end;">
+    <button class="btn-primary" onclick="loadReportsData()" style="width: 100%; padding: 8px;">
+      ${state.language === 'en' ? '🔍 Generate Report' : '🔍 Δημιουργία Αναφοράς'}
+    </button>
+  </div>
+</div>
+
+<!-- NEW: Add data range info below the filters -->
+<div id="dataRangeInfo" style="margin-top: 10px; padding: 8px; background-color: rgba(255, 184, 0, 0.1); border-left: 3px solid #FFB800; border-radius: 4px; font-size: 12px; color: #9CA3AF; display: none;">
+  <span id="dataRangeText"></span>
+</div>
+   <!-- Charts Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px;">
+  
+  <!-- Cash Flow Line Chart -->
+  <div class="card">
+    <h3 style="margin-bottom: 15px; font-weight: 300;">
+      ${state.language === 'en' ? '📈 Cash Flow Trend' : '📈 Τάση Ταμειακής Ροής'}
+      <span id="cashFlowDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+    </h3>
+    <div style="position: relative; height: 300px; width: 100%;">
+      <canvas id="cashFlowLineChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Category Distribution Pie Chart -->
+  <div class="card">
+    <h3 style="margin-bottom: 15px; font-weight: 300;">
+      ${state.language === 'en' ? '🥧 Income vs Expenses' : '🥧 Εισόδημα vs Έξοδα'}
+      <span id="categoryDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+    </h3>
+    <div style="position: relative; height: 300px; width: 100%;">
+      <canvas id="categoryChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Monthly Comparison Bar Chart -->
+  <div class="card">
+    <h3 style="margin-bottom: 15px; font-weight: 300;">
+      ${state.language === 'en' ? '📊 Monthly Comparison' : '📊 Μηνιαία Σύγκριση'}
+      <span id="monthlyDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+    </h3>
+    <div style="position: relative; height: 300px; width: 100%;">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Top Categories Bar Chart -->
+  <div class="card">
+    <h3 style="margin-bottom: 15px; font-weight: 300;">
+      ${state.language === 'en' ? '🏆 Top Categories' : '🏆 Κορυφαίες Κατηγορίες'}
+      <span id="topCatDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+    </h3>
+    <div style="position: relative; height: 300px; width: 100%;">
+      <canvas id="topCategoriesChart"></canvas>
+    </div>
+  </div>
+</div>
 
       <!-- Category Breakdown Table -->
-      <div class="card">
-        <h3>${t('reports.categoryAnalysis')}</h3>
-        <div style="max-height: 400px; overflow-y: auto;">
+      <div class="card" style="margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px; font-weight: 300;">
+          ${state.language === 'en' ? '📋 Category Analysis' : '📋 Ανάλυση Κατηγοριών'}
+        </h3>
+        <div style="overflow-x: auto;">
           <table class="table" style="width: 100%;">
             <thead>
               <tr>
                 <th>${state.language === 'en' ? 'Category' : 'Κατηγορία'}</th>
                 <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
-                <th>${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
-                <th>${state.language === 'en' ? 'Total' : 'Σύνολο'}</th>
-                <th>${state.language === 'en' ? 'Average' : 'Μέσος'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Total' : 'Σύνολο'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Average' : 'Μέσος Όρος'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Min' : 'Ελάχιστο'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Max' : 'Μέγιστο'}</th>
               </tr>
             </thead>
             <tbody id="categoryBody">
               <tr>
-                <td colspan="5" style="text-align: center; padding: 20px;">
+                <td colspan="7" style="text-align: center; padding: 20px;">
                   <span style="color: #9CA3AF;">${t('common.loading')}</span>
                 </td>
               </tr>
@@ -881,9 +2133,136 @@ function renderReports() {
         </div>
       </div>
 
-    </div>
+<!-- Transaction Summary by Type -->
+<div class="card">
+  <h3 style="margin-bottom: 15px; font-weight: 300;">
+    ${state.language === 'en' ? '📊 Transaction Summary' : '📊 Περίληψη Συναλλαγών'}
+  </h3>
+  <div style="overflow-x: auto;">
+    <table class="table" style="width: 100%;">
+      <thead>
+        <tr>
+          <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
+          <th style="text-align: right;">${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
+          <th style="text-align: right;">${state.language === 'en' ? 'Total Amount' : 'Συνολικό Ποσό'}</th>
+          <th style="text-align: right;">${state.language === 'en' ? 'Average' : 'Μέσος Όρος'}</th>
+          <th style="text-align: right;">${state.language === 'en' ? 'Percentage' : 'Ποσοστό'}</th>
+        </tr>
+      </thead>
+      <tbody id="transactionSummaryBody">
+        <tr>
+          <td colspan="5" style="text-align: center; padding: 20px;">
+            <span style="color: #9CA3AF;">${t('common.loading')}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Category Breakdown by Type -->
+<div class="card">
+  <h3 style="margin-bottom: 15px; font-weight: 300;">
+    ${state.language === 'en' ? '📊 Category Distribution' : '📊 Κατανομή Κατηγοριών'}
+  </h3>
+  <div style="position: relative; height: 300px; width: 100%;">
+    <canvas id="categoryBreakdownChart"></canvas>
+  </div>
+</div>
+
   `;
 }
+
+
+// Show available data range info
+async function showDataRangeInfo() {
+  try {
+    const response = await fetch(endpoints.dateRange);
+    const dateRange = await response.json();
+    
+    const infoDiv = document.getElementById('dataRangeInfo');
+    const textSpan = document.getElementById('dataRangeText');
+    
+    if (!infoDiv || !textSpan) return;
+    
+    if (dateRange.hasData) {
+      const minDate = new Date(dateRange.min_date).toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      const maxDate = new Date(dateRange.max_date).toLocaleDateString(state.language === 'el' ? 'el-GR' : 'en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      
+      textSpan.textContent = state.language === 'en' 
+        ? `📊 Available data: ${minDate} to ${maxDate} (${dateRange.total_transactions} transactions)`
+        : `📊 Διαθέσιμα δεδομένα: ${minDate} έως ${maxDate} (${dateRange.total_transactions} συναλλαγές)`;
+      
+      infoDiv.style.display = 'block';
+    } else {
+      infoDiv.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('Error showing data range info:', error);
+  }
+}
+
+function setReportDateRange(preset) {
+  const today = new Date();
+  let dateFrom, dateTo;
+  
+  switch(preset) {
+    case 'today':
+      dateFrom = today.toISOString().split('T')[0];
+      dateTo = today.toISOString().split('T')[0];
+      break;
+      
+    case 'week':
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+      dateFrom = weekStart.toISOString().split('T')[0];
+      dateTo = today.toISOString().split('T')[0];
+      break;
+      
+    case 'month':
+      dateFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+      dateTo = today.toISOString().split('T')[0];
+      break;
+      
+    case 'quarter':
+      const quarter = Math.floor(today.getMonth() / 3);
+      dateFrom = new Date(today.getFullYear(), quarter * 3, 1).toISOString().split('T')[0];
+      dateTo = today.toISOString().split('T')[0];
+      break;
+      
+    case 'year':
+      dateFrom = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
+      dateTo = today.toISOString().split('T')[0];
+      break;
+      
+    case 'all':
+      dateFrom = '';
+      dateTo = '';
+      break;
+  }
+  
+  // Update inputs
+  if (document.getElementById('reportDateFrom')) {
+    document.getElementById('reportDateFrom').value = dateFrom;
+  }
+  if (document.getElementById('reportDateTo')) {
+    document.getElementById('reportDateTo').value = dateTo;
+  }
+  
+  // Load data
+  loadReportsData();
+}
+
+
+
 
 // ========================================
 // LEDGER PAGE
@@ -892,35 +2271,49 @@ function renderReports() {
 function renderLedger() {
   return `
     <div>
-      <div style="margin-bottom: 20px;">
-        <label>${t('accounts.accountName')}:</label>
-        <select id="ledgerAccountSelect" onchange="loadAccountLedger(this.value)">
-          ${state.accounts.map(a => `<option value="${a.id}">${a.account_name}</option>`).join('')}
+      <div style="margin-bottom: 20px; background-color: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <label style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">
+          ${t('accounts.accountName')}:
+        </label>
+        <select 
+          id="ledgerAccountSelect" 
+          onchange="loadAccountLedger(this.value).then(() => renderLedgerTable())"
+          style="width: 100%; padding: 10px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
+          ${state.accounts.length > 0 ? 
+            state.accounts.map(a => 
+              `<option value="${a.id}" ${a.id === state.selectedAccount ? 'selected' : ''}>${a.account_name} (${a.account_number})</option>`
+            ).join('') 
+            : '<option>No accounts available</option>'}
         </select>
       </div>
       
-      <div class="table-container">
-        <table id="ledgerTable" class="table">
-          <thead>
-            <tr>
-              <th>${t('ledger.date')}</th>
-              <th>${t('ledger.description')}</th>
-              <th>${t('ledger.debit')}</th>
-              <th>${t('ledger.credit')}</th>
-              <th>${t('ledger.balance')}</th>
-              <th>${t('ledger.reconciled')}</th>
-            </tr>
-          </thead>
-          <tbody id="ledgerBody">
-            <tr><td colspan="6">${t('common.loading')}</td></tr>
-          </tbody>
-        </table>
+      <div class="card">
+        <h3 style="margin-bottom: 15px;">${t('ledger.title')}</h3>
+        
+        <div style="overflow-x: auto;">
+          <table class="table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th>${t('ledger.date')}</th>
+                <th>${t('ledger.description')}</th>
+                <th>${t('ledger.debit')}</th>
+                <th>${t('ledger.credit')}</th>
+                <th>${t('ledger.balance')}</th>
+                <th>${t('ledger.reconciled')}</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerBody">
+              <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">${t('common.loading')}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Pagination -->
+        <div id="ledgerPagination"></div>
       </div>
     </div>
   `;
-}
-
-// ========================================
+}// ========================================
 // PREDICTIONS PAGE
 // ========================================
 
@@ -931,9 +2324,10 @@ function renderPredictions() {
       
       <div class="card" style="margin-top: 20px;">
         <h3>${t('predictions.cashFlowForecast')}</h3>
-        <canvas id="forecastChart"></canvas>
-      </div>
-      
+        <div style="position: relative; height: 350px; width: 100%;">
+          <canvas id="forecastChart"></canvas>
+        </div>
+      </div>      
       <div class="card" style="margin-top: 20px;">
         <h3>${t('predictions.nextTransactions')}</h3>
         <table id="predictionsTable" class="table">
@@ -1005,27 +2399,48 @@ function handleFileSelect(e) {
   }
 }
 
-async function uploadFile(file) {
+async function uploadFile(files) {
+  // Handle both single file and FileList
+  const file = files[0] || files;
+  
+  if (!file || !file.name) {
+    console.error('❌ No valid file provided');
+    return;
+  }
+
   try {
-    console.log('📤 Starting file upload:', file.name);
+    console.log('📤 Upload starting:', file.name);
     
-    // Show progress
-    document.getElementById('uploadProgress').style.display = 'block';
-    document.getElementById('previewContainer').style.display = 'none';
+    // Show progress UI
+    const progressContainer = document.getElementById('uploadProgress');
+    const previewContainer = document.getElementById('previewContainer');
     
+    if (progressContainer) {
+      progressContainer.style.display = 'block';
+    }
+    if (previewContainer) {
+      previewContainer.style.display = 'none';
+    }
+    
+    // Update progress bar
+    updateProgressBar(10);
+    
+    // Create FormData
     const formData = new FormData();
     formData.append('file', file);
     
     // Simulate progress
-    let progress = 0;
+    let progress = 10;
     const progressInterval = setInterval(() => {
-      if (progress < 90) {
-        progress += Math.random() * 30;
-        updateProgressBar(Math.min(progress, 90));
+      if (progress < 80) {
+        progress += Math.random() * 20;
+        updateProgressBar(Math.min(progress, 80));
       }
     }, 200);
 
-    console.log('📨 Sending file to backend...');
+    console.log('📨 Sending to backend...');
+    
+    // Upload file
     const response = await fetch(`${API_BASE}/files/upload`, {
       method: 'POST',
       body: formData
@@ -1039,35 +2454,88 @@ async function uploadFile(file) {
     }
 
     const data = await response.json();
-    console.log('✅ File uploaded response:', data);
+    console.log('✅ Upload response:', data);
 
     if (data.error) {
       throw new Error(data.error);
     }
 
-    // Show preview
-    displayFilePreview(data);
-    
-    // Update uploads list
-    await loadRecentUploads();
-
-    // Refresh dashboard after successful upload
-    setTimeout(() => {
-      document.getElementById('uploadProgress').style.display = 'none';
-      alert(state.language === 'en' 
-        ? `✅ File uploaded successfully! ${data.transactions?.length || 0} transactions extracted.`
-        : `✅ Το αρχείο ανέβηκε με επιτυχία! ${data.transactions?.length || 0} συναλλαγές εξήχθησαν.`
-      );
-      loadDashboard();
-    }, 1000);
+    if (data.success && data.transactions) {
+      // Create upload record
+      const uploadRecord = {
+        id: 'upload_' + Date.now(),
+        fileName: file.name,
+        fileType: file.type || 'unknown',
+        status: 'completed',
+        transactionCount: data.transactionCount || data.transactions.length,
+        transactions: data.transactions,
+        analysis: data.analysis,
+        summary: data.summary,
+        uploadDate: new Date().toISOString(),
+        error: null
+      };
+      
+      // Add to state
+      state.uploads.unshift(uploadRecord); // Add to beginning
+      
+      // Map and add transactions to state
+      const mappedTransactions = data.transactions.map(txn => ({
+        id: txn.id,
+        date: txn.date,
+        description: txn.description,
+        amount: txn.amount,
+        type: txn.type,
+        category: txn.categoryCode,
+        categoryCode: txn.categoryCode,
+        confidence: txn.confidence,
+        counterparty: txn.counterparty || '',
+        reasoning: txn.reasoning || ''
+      }));
+      
+      state.transactions.push(...mappedTransactions);
+      
+      console.log('✅ Upload successful:', uploadRecord);
+      
+      // Show success message
+      const msg = state.language === 'en'
+        ? `✅ Success! ${uploadRecord.transactionCount} transactions imported from ${file.name}`
+        : `✅ Επιτυχία! ${uploadRecord.transactionCount} συναλλαγές από ${file.name}`;
+      
+      // Hide progress, show preview
+      setTimeout(() => {
+        if (progressContainer) progressContainer.style.display = 'none';
+        displayFilePreview(uploadRecord);
+        loadRecentUploads(); // Refresh the uploads table
+        
+        // Show success notification
+        showNotification(msg, 'success');
+      }, 500);
+      
+    } else {
+      throw new Error('Invalid response from server');
+    }
 
   } catch (error) {
     console.error('❌ Upload error:', error);
-    clearInterval(progressInterval);
-    document.getElementById('uploadProgress').style.display = 'none';
-    alert(`${state.language === 'en' ? 'Upload failed' : 'Το ανέβασμα απέτυχε'}: ${error.message}`);
+    
+    // Hide progress
+    const progressContainer = document.getElementById('uploadProgress');
+    if (progressContainer) progressContainer.style.display = 'none';
+    
+    // Show error
+    const errorMsg = state.language === 'en'
+      ? `❌ Upload failed: ${error.message}`
+      : `❌ Το ανέβασμα απέτυχε: ${error.message}`;
+    
+    showNotification(errorMsg, 'error');
   }
+  
+  // Reset file input
+  const fileInput = document.getElementById('fileInput');
+  if (fileInput) fileInput.value = '';
 }
+
+
 
 function updateProgressBar(percent) {
   const bar = document.getElementById('progressBar');
@@ -1080,105 +2548,263 @@ function updateProgressBar(percent) {
   }
 }
 
-function displayFilePreview(data) {
-  const preview = document.getElementById('previewData');
-  if (!preview) return;
-
-  const transactions = data.transactions || [];
+function displayFilePreview(upload) {
+  console.log('🔍 Displaying preview for:', upload.fileName);
   
-  if (transactions.length === 0) {
-    preview.innerHTML = '<span style="color: #9CA3AF;">No transactions to preview</span>';
+  const previewContainer = document.getElementById('previewContainer');
+  const previewData = document.getElementById('previewData');
+  
+  if (!previewContainer || !previewData) {
+    console.warn('⚠️ Preview elements not found');
+    return;
+  }
+
+  if (!upload.transactions || upload.transactions.length === 0) {
+    console.warn('⚠️ No transactions to preview');
+    previewData.innerHTML = '<p style="color: #9CA3AF; text-align: center; padding: 20px;">No transactions found</p>';
+    previewContainer.style.display = 'block';
     return;
   }
 
   // Show first 10 transactions
-  const previewTxns = transactions.slice(0, 10);
-  let html = `<div style="color: #10b981; margin-bottom: 10px;">✅ Preview (showing ${previewTxns.length} of ${transactions.length})</div>`;
+  const previewTxns = upload.transactions.slice(0, 10);
+  
+  let html = `
+    <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <span style="font-size: 24px;">✅</span>
+        <div>
+          <div style="font-weight: 700; font-size: 16px; color: #10b981;">
+            ${state.language === 'en' ? 'Upload Successful!' : 'Επιτυχής Μεταφόρτωση!'}
+          </div>
+          <div style="font-size: 12px; color: #9CA3AF; margin-top: 3px;">
+            ${upload.fileName} • ${upload.transactionCount} ${state.language === 'en' ? 'transactions' : 'συναλλαγές'}
+          </div>
+        </div>
+      </div>
+      
+      ${upload.summary ? `
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(16, 185, 129, 0.3);">
+          <div>
+            <div style="font-size: 10px; color: #9CA3AF; text-transform: uppercase;">${state.language === 'en' ? 'Income' : 'Εισόδημα'}</div>
+            <div style="font-size: 16px; font-weight: 600; color: #10b981;">€${(upload.summary.creditTotal || 0).toFixed(2)}</div>
+          </div>
+          <div>
+            <div style="font-size: 10px; color: #9CA3AF; text-transform: uppercase;">${state.language === 'en' ? 'Expenses' : 'Έξοδα'}</div>
+            <div style="font-size: 16px; font-weight: 600; color: #ef4444;">€${(upload.summary.debitTotal || 0).toFixed(2)}</div>
+          </div>
+          <div>
+            <div style="font-size: 10px; color: #9CA3AF; text-transform: uppercase;">${state.language === 'en' ? 'Net' : 'Καθαρό'}</div>
+            <div style="font-size: 16px; font-weight: 600; color: ${upload.summary.netCashFlow >= 0 ? '#10b981' : '#ef4444'};">
+              €${(upload.summary.netCashFlow || 0).toFixed(2)}
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+      <h4 style="margin: 0 0 10px 0; color: var(--text-primary); font-weight: 300;">
+        ${state.language === 'en' ? 'Preview' : 'Προεπισκόπηση'} 
+        <span style="color: #9CA3AF; font-size: 12px;">(${state.language === 'en' ? 'showing' : 'εμφάνιση'} ${previewTxns.length} ${state.language === 'en' ? 'of' : 'από'} ${upload.transactionCount})</span>
+      </h4>
+    </div>
+  `;
   
   previewTxns.forEach((txn, idx) => {
+    const categoryName = getCategoryName(txn.categoryCode);
+    const confidenceColor = txn.confidence >= 0.9 ? '#10b981' : txn.confidence >= 0.7 ? '#FFB800' : '#ef4444';
+    
     html += `
-      <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #1F2937;">
-        <div><strong>#${idx + 1}</strong> - ${txn.date}</div>
-        <div style="color: #FFB800;">📝 ${txn.description}</div>
-        <div>
-          <span style="color: ${txn.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
-            ${txn.type}: €${(txn.amount || 0).toFixed(2)}
+      <div style="background-color: var(--bg-hover); padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid ${txn.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+          <div style="flex: 1;">
+            <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">
+              #${idx + 1} • ${txn.date}
+            </div>
+            <div style="color: var(--text-secondary); font-size: 13px;">
+              ${txn.description}
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: 700; font-size: 16px; color: ${txn.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+              ${txn.type === 'CREDIT' ? '+' : '-'}€${Math.abs(txn.amount || 0).toFixed(2)}
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; background-color: ${txn.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${txn.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+            ${txn.type}
           </span>
-          | Category: ${txn.category_code || 'N/A'}
-          | Confidence: ${((txn.confidence || 0) * 100).toFixed(0)}%
+          <span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; background-color: rgba(100, 100, 100, 0.2); color: #9CA3AF;">
+            ${categoryName}
+          </span>
+          <span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; background-color: rgba(${txn.confidence >= 0.9 ? '16, 185, 129' : txn.confidence >= 0.7 ? '255, 184, 0' : '239, 68, 68'}, 0.2); color: ${confidenceColor};">
+            ${((txn.confidence || 0) * 100).toFixed(0)}% ${state.language === 'en' ? 'confidence' : 'εμπιστοσύνη'}
+          </span>
         </div>
       </div>
     `;
   });
+  
+  if (upload.transactionCount > 10) {
+    html += `
+      <div style="text-align: center; padding: 15px; color: #9CA3AF; font-size: 13px;">
+        ${state.language === 'en' ? 'And' : 'Και'} ${upload.transactionCount - 10} ${state.language === 'en' ? 'more transactions...' : 'περισσότερες συναλλαγές...'}
+      </div>
+    `;
+  }
 
-  preview.innerHTML = html;
-  document.getElementById('previewContainer').style.display = 'block';
+  previewData.innerHTML = html;
+  previewContainer.style.display = 'block';
+  
+  // Scroll to preview
+  setTimeout(() => {
+    previewContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 200);
 }
 
 async function loadRecentUploads() {
-  try {
-    console.log('📋 Loading recent uploads...');
-    const response = await fetch(`${API_BASE}/files/uploads`);
-    
-    if (!response.ok) {
-      console.warn('Could not load uploads list');
-      return;
-    }
+  console.log('📋 Loading recent uploads...');
+  
+  const tbody = document.getElementById('uploadsBody');
+  if (!tbody) {
+    console.warn('⚠️ Upload table body not found');
+    return;
+  }
 
-    const uploads = await response.json();
-    console.log('✅ Loaded', uploads.length, 'uploads');
-
-    const tbody = document.getElementById('uploadsBody');
-    if (!tbody) return;
-
-    if (uploads.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="5" style="text-align: center; padding: 20px; color: #9CA3AF;">
-            ${state.language === 'en' ? 'No uploads yet' : 'Δεν υπάρχουν αναβάσματα ακόμη'}
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-    tbody.innerHTML = uploads.map((upload, idx) => `
+  if (state.uploads.length === 0) {
+    tbody.innerHTML = `
       <tr>
-        <td>${upload.fileName || upload.file_name || 'Unknown'}</td>
-        <td>${upload.fileType || upload.file_type || 'CSV'}</td>
-        <td>
-          ${upload.status === 'completed' ? '✅ Completed' : 
-            upload.status === 'processing' ? '⏳ Processing' : 
-            upload.status === 'failed' ? '❌ Failed' : upload.status}
+        <td colspan="5" style="text-align: center; padding: 40px;">
+          <div style="font-size: 48px; margin-bottom: 15px;">📁</div>
+          <p style="color: #9CA3AF; margin-bottom: 8px;">
+            ${state.language === 'en' ? 'No uploads yet' : 'Δεν υπάρχουν αναβάσματα ακόμη'}
+          </p>
+          <p style="color: #6B7280; font-size: 12px;">
+            ${state.language === 'en' ? 'Upload a file to get started' : 'Ανεβάστε ένα αρχείο για να ξεκινήσετε'}
+          </p>
         </td>
-        <td>${upload.transactionCount || upload.transaction_count || 0}</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = state.uploads.map((upload, idx) => {
+    const uploadDate = upload.uploadDate ? new Date(upload.uploadDate).toLocaleString(state.language === 'el' ? 'el-GR' : 'en-US') : '-';
+    
+    const statusIcon = upload.status === 'completed' ? '✅' : 
+                       upload.status === 'processing' ? '⏳' : 
+                       upload.status === 'failed' ? '❌' : '❓';
+    
+    const statusText = upload.status === 'completed' ? (state.language === 'en' ? 'Completed' : 'Ολοκληρώθηκε') : 
+                       upload.status === 'processing' ? (state.language === 'en' ? 'Processing' : 'Επεξεργασία') : 
+                       upload.status === 'failed' ? (state.language === 'en' ? 'Failed' : 'Απέτυχε') : 
+                       upload.status;
+    
+    const statusColor = upload.status === 'completed' ? '#10b981' : 
+                        upload.status === 'processing' ? '#FFB800' : 
+                        upload.status === 'failed' ? '#ef4444' : 
+                        '#9CA3AF';
+    
+    return `
+      <tr style="background-color: ${idx === 0 ? 'rgba(255, 184, 0, 0.05)' : 'transparent'};">
         <td>
-          ${upload.status === 'completed' ? `
-            <button onclick="viewUploadDetails('${upload.id || idx}')" class="btn-small" style="padding: 4px 8px; font-size: 12px;">
-              ${state.language === 'en' ? 'View' : 'Προβολή'}
+          <div style="font-weight: 600; color: var(--text-primary);">${upload.fileName}</div>
+          <div style="font-size: 11px; color: #6B7280; margin-top: 2px;">${uploadDate}</div>
+        </td>
+        <td>
+          <span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: ${statusColor}20; color: ${statusColor};">
+            ${statusIcon} ${statusText}
+          </span>
+        </td>
+        <td style="text-align: right; font-weight: 600;">
+          ${upload.transactionCount || 0}
+        </td>
+        <td style="text-align: right;">
+          ${upload.summary ? `
+            <div style="font-size: 12px;">
+              <span style="color: #10b981;">+€${(upload.summary.creditTotal || 0).toFixed(2)}</span> / 
+              <span style="color: #ef4444;">-€${(upload.summary.debitTotal || 0).toFixed(2)}</span>
+            </div>
+          ` : '-'}
+        </td>
+        <td style="text-align: center;">
+          ${upload.status === 'completed' && upload.transactions ? `
+            <button 
+              onclick="showUploadDetails('${upload.id}')" 
+              class="btn-primary" 
+              style="padding: 6px 12px; font-size: 12px;">
+              ${state.language === 'en' ? '👁️ View' : '👁️ Προβολή'}
             </button>
+          ` : upload.error ? `
+            <span style="color: #ef4444; font-size: 11px;">${upload.error}</span>
           ` : '-'}
         </td>
       </tr>
-    `).join('');
+    `;
+  }).join('');
 
-  } catch (error) {
-    console.warn('⚠️ Could not load uploads:', error.message);
-  }
+  console.log('✅ Loaded', state.uploads.length, 'uploads');
 }
 
-function viewUploadDetails(uploadId) {
-  console.log('Viewing upload:', uploadId);
-  changePage('transactions');
+// Show notification toast
+function showNotification(message, type = 'info') {
+  // Remove existing notification
+  const existing = document.getElementById('notification');
+  if (existing) existing.remove();
+  
+  const colors = {
+    success: { bg: '#10b981', border: '#059669' },
+    error: { bg: '#ef4444', border: '#dc2626' },
+    info: { bg: '#3B82F6', border: '#2563EB' },
+    warning: { bg: '#FFB800', border: '#F59E0B' }
+  };
+  
+  const color = colors[type] || colors.info;
+  
+  const notification = document.createElement('div');
+  notification.id = 'notification';
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: ${color.bg};
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    border-left: 4px solid ${color.border};
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    max-width: 400px;
+    animation: slideIn 0.3s ease-out;
+    font-size: 14px;
+    font-weight: 500;
+  `;
+  
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    notification.style.animation = 'slideOut 0.3s ease-in';
+    setTimeout(() => notification.remove(), 300);
+  }, 5000);
 }
 
-// Load uploads when page loads
-function initializeUploadPage() {
-  if (state.currentPage === 'upload') {
-    setTimeout(() => {
-      loadRecentUploads();
-    }, 100);
+
+
+
+
+function showUploadDetails(uploadId) {
+  const upload = state.uploads.find(u => u.id === uploadId);
+  
+  if (!upload) {
+    showNotification(state.language === 'en' ? 'Upload not found' : 'Το ανέβασμα δεν βρέθηκε', 'error');
+    return;
   }
+  
+  displayFilePreview(upload);
 }
 
 
@@ -1186,123 +2812,245 @@ function initializeUploadPage() {
 function renderTransactions() {
   return `
     <div>
-      <!-- Filters -->
-      <div class="filters-container">
-        <input type="date" id="filterDateFrom" placeholder="${t('transactions.from')}">
-        <input type="date" id="filterDateTo" placeholder="${t('transactions.to')}">
-        <input type="text" id="filterSearch" placeholder="${t('transactions.search')}...">
-        <button onclick="applyFilters()" class="btn-primary">Filter</button>
+      <!-- Filters Card -->
+      <div class="card" style="margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px; font-weight: 300;">
+          ${state.language === 'en' ? 'Filters' : 'Φίλτρα'}
+        </h3>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+          
+          <!-- Date From -->
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}
+            </label>
+            <input 
+              type="date" 
+              id="filterDateFrom" 
+              style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+          </div>
+          
+          <!-- Date To -->
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}
+            </label>
+            <input 
+              type="date" 
+              id="filterDateTo" 
+              style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+          </div>
+          
+          <!-- Search -->
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Search' : 'Αναζήτηση'}
+            </label>
+            <input 
+              type="text" 
+              id="filterSearch" 
+              placeholder="${state.language === 'en' ? 'Description, counterparty...' : 'Περιγραφή, αντισυμβαλλόμενος...'}"
+              style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+          </div>
+          
+          <!-- Type -->
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Type' : 'Τύπος'}
+            </label>
+            <select 
+              id="filterType" 
+              style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+              <option value="all">${state.language === 'en' ? 'All' : 'Όλα'}</option>
+              <option value="CREDIT">${state.language === 'en' ? 'Credit (Income)' : 'Πίστωση (Εισόδημα)'}</option>
+              <option value="DEBIT">${state.language === 'en' ? 'Debit (Expense)' : 'Χρέωση (Έξοδο)'}</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 10px;">
+          <button 
+            onclick="applyFilters()" 
+            class="btn-primary" 
+            style="flex: 1;">
+            ${state.language === 'en' ? '🔍 Apply Filters' : '🔍 Εφαρμογή Φίλτρων'}
+          </button>
+          <button 
+            onclick="clearFilters()" 
+            class="btn-secondary" 
+            style="flex: 1;">
+            ${state.language === 'en' ? '✕ Clear' : '✕ Καθαρισμός'}
+          </button>
+        </div>
       </div>
       
-      <div class="table-container">
-        <table id="transactionsTable" class="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Amount</th>
-              <th>Type</th>
-              <th>Category</th>
-              <th>Confidence</th>
-            </tr>
-          </thead>
-          <tbody id="txnBody">
-            <tr><td colspan="6">${t('common.loading')}</td></tr>
-          </tbody>
-        </table>
+      <!-- Transactions Table -->
+      <div class="card">
+        <h3 style="margin-bottom: 15px; font-weight: 300;">
+          ${state.language === 'en' ? 'Transactions' : 'Συναλλαγές'}
+        </h3>
+        
+        <div style="overflow-x: auto;">
+          <table class="table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th>${state.language === 'en' ? 'Date' : 'Ημερομηνία'}</th>
+                <th>${state.language === 'en' ? 'Description' : 'Περιγραφή'}</th>
+                <th>${state.language === 'en' ? 'Amount' : 'Ποσό'}</th>
+                <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
+                <th>${state.language === 'en' ? 'Category' : 'Κατηγορία'}</th>
+                <th>${state.language === 'en' ? 'Confidence' : 'Εμπιστοσύνη'}</th>
+              </tr>
+            </thead>
+            <tbody id="txnBody">
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                  ${state.language === 'en' ? 'Loading...' : 'Φόρτωση...'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Pagination -->
+        <div id="transactionsPagination"></div>
       </div>
     </div>
   `;
 }
-
 function renderUpload() {
   return `
     <div>
       <div class="card" style="margin-bottom: 20px;">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">Upload File</h3>
+        <h3 style="margin-bottom: 15px; font-weight: 300;">
+          ${state.language === 'en' ? 'Upload Bank Statement' : 'Ανέβασμα Τραπεζικού Καταστατικού'}
+        </h3>
         
         <div class="upload-area" 
              id="uploadArea" 
              onclick="document.getElementById('fileInput').click()"
-             style="cursor: pointer; padding: 40px; text-align: center; border: 2px dashed var(--border-color); border-radius: 8px;">
-          <div style="font-size: 30px; margin-bottom: 10px;">📄</div>
-          <div>Click to select file</div>
+             ondragover="handleDragOver(event)"
+             ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event)"
+             style="cursor: pointer; padding: 40px; text-align: center; border: 2px dashed #FFB800; border-radius: 8px; background-color: rgba(255, 184, 0, 0.05);">
+          <div style="font-size: 48px; margin-bottom: 15px;">📄</div>
+          <div style="font-size: 16px; color: #E5E7EB; margin-bottom: 5px;">
+            ${state.language === 'en' ? 'Click or drag file to upload' : 'Κάντε κλικ ή σύρετε αρχείο για ανέβασμα'}
+          </div>
+          <div style="font-size: 12px; color: #9CA3AF;">
+            ${state.language === 'en' ? 'Supports CSV, XLSX files' : 'Υποστηρίζει αρχεία CSV, XLSX'}
+          </div>
         </div>
 
         <input type="file" 
                id="fileInput" 
                style="display: none;" 
-               accept=".csv,.xlsx,.xls,.txt"
+               accept=".csv,.xlsx,.xls"
                onchange="handleFileSelect(event)">
       </div>
 
-      ${state.uploads.length > 0 ? `
+      <!-- Upload Progress -->
+      <div id="uploadProgress" style="display: none; margin-bottom: 20px;">
         <div class="card">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Status</th>
-                <th>Transactions</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${state.uploads.map(u => `
-                <tr>
-                  <td>${u.fileName}</td>
-                  <td>
-                    ${u.status === 'processing' ? '⏳ Processing' :
-                      u.status === 'completed' ? '✓ Done' :
-                      u.status === 'failed' ? '✗ Failed: ' + u.error : u.status}
-                  </td>
-                  <td>${u.transactionCount || '-'}</td>
-                  <td>
-                    ${u.status === 'completed' && u.transactions ?
-                      `<button onclick="previewUpload('${u.id}')">Preview</button>` : '-'}
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+          <h4 style="margin-bottom: 10px;">${state.language === 'en' ? 'Uploading...' : 'Ανέβασμα...'}</h4>
+          <div style="background-color: #1F2937; height: 8px; border-radius: 4px; overflow: hidden;">
+            <div id="progressBar" style="height: 100%; background-color: #FFB800; width: 0%; transition: width 0.3s;"></div>
+          </div>
+          <div id="uploadStatus" style="margin-top: 8px; color: #9CA3AF; font-size: 12px;">0% Complete</div>
         </div>
-      ` : ''}
-    </div>
+      </div>
+
+      <!-- Preview Container -->
+      <div id="previewContainer" style="display: none; margin-bottom: 20px;">
+        <div class="card">
+          <h3 style="margin-bottom: 15px;">
+            ${state.language === 'en' ? 'Preview' : 'Προεπισκόπηση'}
+          </h3>
+          <div id="previewData"></div>
+        </div>
+      </div>
+
+<!-- Recent Uploads -->
+<div class="card">
+  <h3 style="margin-bottom: 15px;">
+    ${state.language === 'en' ? 'Recent Uploads' : 'Πρόσφατα Αναβάσματα'}
+  </h3>
+  <table class="table" style="width: 100%;">
+    <thead>
+      <tr>
+        <th>${state.language === 'en' ? 'File' : 'Αρχείο'}</th>
+        <th>${state.language === 'en' ? 'Status' : 'Κατάσταση'}</th>
+        <th style="text-align: right;">${state.language === 'en' ? 'Transactions' : 'Συναλλαγές'}</th>
+        <th style="text-align: right;">${state.language === 'en' ? 'Summary' : 'Περίληψη'}</th>
+        <th style="text-align: center;">${state.language === 'en' ? 'Action' : 'Ενέργεια'}</th>
+      </tr>
+    </thead>
+    <tbody id="uploadsBody">
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 20px; color: #9CA3AF;">
+          ${state.language === 'en' ? 'Loading...' : 'Φόρτωση...'}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
   `;
 }
-
-
 
 
 // ========================================
 // EVENT HANDLERS
 // ========================================
 
-function changePage(page) {
+async function changePage(page) {
+  console.log('📄 Changing to page:', page);
   state.currentPage = page;
-  
-  if (page === 'dashboard') {
-    loadDashboard();
-  } else if (page === 'accounts') {
-    loadAccounts().then(() => {
-      renderAccountsTable();
-    });
-  } else if (page === 'predictions') {
-    loadPredictions().then(() => renderPredictionsTable());
-  } else if (page === 'reports') {
-    render();
-    // Load reports data after render
-    setTimeout(() => {
-      loadReportsData();
-    }, 100);
-  } else if (page === 'ledger') {
-    loadAccounts().then(() => {
-      loadAccountLedger(state.selectedAccount);
-      renderLedgerTable();
-    });
+
+  // Wait until render completes (if async)
+  await Promise.resolve(render());
+
+  switch (page) {
+    case 'dashboard':
+      await loadDashboard();
+      break;
+
+    case 'transactions':
+      await new Promise(r => setTimeout(r, 100));
+      await loadTransactions();
+      break;
+
+    case 'accounts':
+      const accounts = await loadAccounts();
+      if (accounts) renderAccountsTable();
+      break;
+
+    case 'predictions':
+      await new Promise(r => setTimeout(r, 100));
+      await loadPredictions();
+      renderPredictionsTable();
+      break;
+
+    case 'reports':
+      await new Promise(r => setTimeout(r, 100));
+      await loadReportsData();
+      break;
+
+    case 'ledger':
+      const accs = await loadAccounts();
+      if (accs?.length) {
+        state.selectedAccount = accs[0].id;
+        await loadAccountLedger(state.selectedAccount);
+        renderLedgerTable();
+      }
+      break;
+
+    case 'upload':
+      await new Promise(r => setTimeout(r, 100));
+      await loadRecentUploads();
+      break;
   }
-  
-  render();
 }
 
 
@@ -1367,21 +3115,44 @@ async function createAccount(event) {
 
 function renderAccountsTable() {
   const tbody = document.getElementById('accountsBody');
+  const paginationContainer = document.getElementById('accountsPagination');
+  
   if (!tbody) return;
   
-  tbody.innerHTML = state.accounts.map(a => `
+  if (state.accounts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #9CA3AF;">No accounts yet</td></tr>';
+    if (paginationContainer) paginationContainer.innerHTML = '';
+    return;
+  }
+  
+  // Update total items
+  state.pagination.accounts.totalItems = state.accounts.length;
+  
+  // Get paginated data
+  const paginatedData = paginateData(
+    state.accounts,
+    state.pagination.accounts.currentPage,
+    state.pagination.accounts.itemsPerPage
+  );
+  
+  tbody.innerHTML = paginatedData.map(a => `
     <tr>
       <td>${a.account_name}</td>
       <td>${a.account_number}</td>
       <td>${a.account_type}</td>
-      <td>${formatCurrency(a.current_balance)}</td>
+      <td style="text-align: right; font-weight: 600;">${formatCurrency(a.current_balance)}</td>
       <td>
-        <button class="action-btn" onclick="viewAccountLedger('${a.id}')">View Ledger</button>
+        <button 
+          class="btn-primary" 
+          onclick="viewAccountLedger('${a.id}')" 
+          style="padding: 6px 12px; font-size: 12px;">
+          ${state.language === 'en' ? 'View Ledger' : 'Προβολή'}
+        </button>
       </td>
     </tr>
   `).join('');
+  
 }
-
 function viewAccountLedger(accountId) {
   state.selectedAccount = accountId;
   changePage('ledger');
@@ -1390,142 +3161,336 @@ function viewAccountLedger(accountId) {
 function renderLedgerTable() {
   setTimeout(() => {
     const tbody = document.getElementById('ledgerBody');
+    const paginationContainer = document.getElementById('ledgerPagination');
+    
     if (!tbody) return;
     
-    tbody.innerHTML = state.ledger.map(entry => `
+    console.log('📊 Rendering ledger table with', state.ledger.length, 'entries');
+    
+    if (state.ledger.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #9CA3AF;">No ledger entries for this account</td></tr>';
+      if (paginationContainer) paginationContainer.innerHTML = '';
+      return;
+    }
+    
+    // Update total items
+    state.pagination.ledger.totalItems = state.ledger.length;
+    
+    // Get paginated data
+    const paginatedData = paginateData(
+      state.ledger,
+      state.pagination.ledger.currentPage,
+      state.pagination.ledger.itemsPerPage
+    );
+    
+    tbody.innerHTML = paginatedData.map(entry => `
       <tr>
         <td>${formatDate(entry.entry_date)}</td>
-        <td>${entry.description}</td>
-        <td>${entry.entry_type === 'DEBIT' ? formatCurrency(entry.amount) : '-'}</td>
-        <td>${entry.entry_type === 'CREDIT' ? formatCurrency(entry.amount) : '-'}</td>
-        <td>${formatCurrency(entry.running_balance)}</td>
-        <td>${entry.reconciled ? '✓' : '-'}</td>
+        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${entry.description}</td>
+        <td style="text-align: right; color: #ef4444;">${entry.entry_type === 'DEBIT' ? formatCurrency(entry.amount) : '-'}</td>
+        <td style="text-align: right; color: #10b981;">${entry.entry_type === 'CREDIT' ? formatCurrency(entry.amount) : '-'}</td>
+        <td style="text-align: right; font-weight: 600;">${formatCurrency(entry.running_balance)}</td>
+        <td style="text-align: center;">${entry.reconciled ? '✓' : '-'}</td>
       </tr>
     `).join('');
+    
+    // Render pagination
+    if (paginationContainer) {
+      paginationContainer.innerHTML = renderPagination('ledger', state.ledger.length);
+    }
   }, 100);
 }
-
 // ========================================
 // CHART FUNCTIONS
 // ========================================
 
 function renderDashboardCharts() {
+  // Check Chart.js
+  if (typeof Chart === 'undefined') {
+    console.error('❌ Chart.js not loaded!');
+    alert('Chart.js library not loaded. Check your internet connection.');
+    return;
+  }
+  
   setTimeout(() => {
-    // Cash Flow Chart
+    console.log('🎨 Starting chart render...');
+    
+    // Get canvas
     const cashFlowCtx = document.getElementById('cashFlowChart');
-    if (cashFlowCtx && state.reports.cashFlow?.length > 0) {
-      const data = state.reports.cashFlow.slice(-6);
-      new Chart(cashFlowCtx, {
+    console.log('Canvas element:', cashFlowCtx);
+    
+    if (!cashFlowCtx) {
+      console.error('❌ Canvas element not found in DOM!');
+      return;
+    }
+    
+    // Check data
+    console.log('State reports object:', state.reports);
+    console.log('Cash flow array:', state.reports?.cashFlow);
+    console.log('Cash flow length:', state.reports?.cashFlow?.length);
+    
+    if (!state.reports?.cashFlow) {
+      console.error('❌ No cash flow data in state!');
+      alert('No financial data loaded. Please upload transactions first.');
+      return;
+    }
+    
+    if (state.reports.cashFlow.length === 0) {
+      console.warn('⚠️ Cash flow data is empty array');
+      cashFlowCtx.parentElement.innerHTML = '<p style="text-align: center; padding: 40px; color: #9CA3AF;">No cash flow data available. Upload transactions to see charts.</p>';
+      return;
+    }
+    
+    // Destroy existing chart
+    if (window.cashFlowChartInstance) {
+      console.log('🗑️ Destroying old chart...');
+      window.cashFlowChartInstance.destroy();
+    }
+    
+    // Prepare data
+    const data = state.reports.cashFlow.slice(-6);
+    console.log('Chart data (last 6 months):', data);
+    
+    const labels = data.map(d => d.period);
+    const incomeData = data.map(d => d.total_income || 0);
+    const expensesData = data.map(d => d.total_expenses || 0);
+    
+    console.log('Labels:', labels);
+    console.log('Income data:', incomeData);
+    console.log('Expenses data:', expensesData);
+    
+    // Create chart
+    try {
+      console.log('🎨 Creating chart...');
+      window.cashFlowChartInstance = new Chart(cashFlowCtx, {
         type: 'line',
         data: {
-          labels: data.map(d => d.period),
+          labels: labels,
           datasets: [
             {
               label: 'Income',
-              data: data.map(d => d.total_income),
+              data: incomeData,
               borderColor: '#10b981',
               backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              tension: 0.4
+              tension: 0.4,
+              fill: true
             },
             {
               label: 'Expenses',
-              data: data.map(d => d.total_expenses),
+              data: expensesData,
               borderColor: '#ef4444',
               backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              tension: 0.4
+              tension: 0.4,
+              fill: true
             }
           ]
         },
-        options: { responsive: true, maintainAspectRatio: false }
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: { 
+                color: '#E5E7EB',
+                padding: 10,
+                font: { size: 12 }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { 
+                color: '#9CA3AF',
+                callback: function(value) {
+                  return '€' + value.toFixed(0);
+                }
+              },
+              grid: { color: '#1F2937' }
+            },
+            x: {
+              ticks: { color: '#9CA3AF' },
+              grid: { color: '#1F2937' }
+            }
+          }
+        }
       });
+      console.log('✅ Chart created successfully!');
+    } catch (error) {
+      console.error('❌ Chart creation failed:', error);
+      alert('Chart creation failed: ' + error.message);
     }
     
     // Recurring List
     const recurringList = document.getElementById('recurringList');
-    if (recurringList && state.reports.recurring?.length > 0) {
-      recurringList.innerHTML = `
-        <table style="width: 100;">
-          ${state.reports.recurring.slice(0, 5).map(r => `
-            <tr style="padding: 10px; border-bottom: 1px solid #1f2937;">
-              <td>${r.description}</td>
-              <td style="text-align: right;">${r.occurrence_count}x</td>
-              <td style="text-align: right;">${formatCurrency(r.avg_amount)}</td>
-            </tr>
-          `).join('')}
-        </table>
-      `;
+    if (recurringList) {
+      if (state.reports?.recurring?.length > 0) {
+        recurringList.innerHTML = `
+          <table style="width: 100%;">
+            ${state.reports.recurring.slice(0, 5).map(r => `
+              <tr style="border-bottom: 1px solid #1f2937;">
+                <td style="padding: 10px 0;">${r.description}</td>
+                <td style="text-align: right; color: #9CA3AF;">${r.occurrence_count}x</td>
+                <td style="text-align: right; font-weight: 600;">€${(r.avg_amount || 0).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+        console.log('✅ Recurring list rendered');
+      } else {
+        recurringList.innerHTML = '<p style="color: #9CA3AF; text-align: center; padding: 20px;">No recurring patterns detected</p>';
+      }
     }
     
     // Recent Transactions
     const recentBody = document.getElementById('recentBody');
-    if (recentBody && state.reports.topTxns?.length > 0) {
-      recentBody.innerHTML = state.reports.topTxns.slice(0, 5).map(t => `
-        <tr>
-          <td>${formatDate(t.date)}</td>
-          <td>${t.description}</td>
-          <td>${formatCurrency(t.amount)}</td>
-          <td class="type-${t.type.toLowerCase()}">${t.type}</td>
-        </tr>
-      `).join('');
+    if (recentBody) {
+      if (state.transactions?.length > 0) {
+        recentBody.innerHTML = state.transactions.slice(0, 10).map(t => `
+          <tr>
+            <td>${t.date}</td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${t.description}</td>
+            <td style="text-align: right; color: ${t.type === 'CREDIT' ? '#10b981' : '#ef4444'}; font-weight: 600;">
+              €${Math.abs(t.amount).toFixed(2)}
+            </td>
+            <td>
+              <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; 
+                background-color: ${t.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+                color: ${t.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+                ${t.type}
+              </span>
+            </td>
+          </tr>
+        `).join('');
+        console.log('✅ Recent transactions rendered');
+      } else {
+        recentBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #9CA3AF;">No transactions yet. Upload a file to get started.</td></tr>';
+      }
     }
-  }, 100);
+  }, 200);
 }
 
 function renderReportsCharts() {
-  setTimeout(() => {
-    // Category Chart
-    const categoryCtx = document.getElementById('categoryChart');
-    if (categoryCtx) {
-      const categories = state.reports.summary || [];
-      new Chart(categoryCtx, {
-        type: 'pie',
-        data: {
-          labels: categories.length > 0 ? ['Income', 'Expenses'] : [],
-          datasets: [{
-            data: categories.length > 0 ? [
-              state.reports.summary?.credit_total || 0,
-              state.reports.summary?.debit_total || 0
-            ] : [],
-            backgroundColor: ['#10b981', '#ef4444']
-          }]
-        },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
+  const categoryCtx = document.getElementById('categoryChart');
+  if (!categoryCtx) return;
+
+  const summary = state.reports?.summary;
+  if (!summary) {
+    console.warn('⚠️ No report summary available');
+    return;
+  }
+
+  // Destroy previous instance
+  if (window.categoryChartInstance) {
+    window.categoryChartInstance.destroy();
+  }
+
+  const data = {
+    labels: ['Income', 'Expenses'],
+    datasets: [{
+      data: [summary.credit_total || 0, summary.debit_total || 0],
+      backgroundColor: ['#10b981', '#ef4444'],
+    }]
+  };
+
+  window.categoryChartInstance = new Chart(categoryCtx, {
+    type: 'pie',
+    data,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#E5E7EB', padding: 10 }
+        }
+      }
     }
-  }, 100);
+  });
+
+  console.log('✅ Category summary chart rendered');
 }
 
 function renderPredictionsTable() {
   setTimeout(() => {
-    const tbody = document.getElementById('predictionsBody');
-    if (!tbody || !state.predictions.forecast) return;
+    console.log('🔮 Rendering predictions...');
+    console.log('Predictions data:', state.predictions);
     
-    tbody.innerHTML = state.predictions.forecast.map(f => `
-      <tr>
-        <td>${f.month}</td>
-        <td>${formatCurrency(f.predicted_income)}</td>
-        <td>${formatCurrency(f.predicted_expenses)}</td>
-        <td style="color: ${f.net_flow >= 0 ? '#10b981' : '#ef4444'}">${formatCurrency(f.net_flow)}</td>
-        <td>${(f.confidence * 100).toFixed(0)}%</td>
-      </tr>
-    `).join('');
+    const tbody = document.getElementById('predictionsBody');
+    if (tbody) {
+      if (state.predictions?.forecast && state.predictions.forecast.length > 0) {
+        tbody.innerHTML = state.predictions.forecast.map(f => `
+          <tr>
+            <td>${f.month || f.period}</td>
+            <td style="text-align: right; color: #10b981;">${formatCurrency(f.predicted_income || 0)}</td>
+            <td style="text-align: right; color: #ef4444;">${formatCurrency(f.predicted_expenses || 0)}</td>
+            <td style="text-align: right; color: ${(f.net_flow || 0) >= 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${formatCurrency(f.net_flow || 0)}</td>
+            <td style="text-align: center;">
+              <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; background-color: rgba(16, 185, 129, 0.1); color: #10b981;">
+                ${((f.confidence || 0) * 100).toFixed(0)}%
+              </span>
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #9CA3AF;">No forecast data available. Upload more transactions to enable predictions.</td></tr>';
+      }
+    }
     
     // Forecast Chart
     const forecastCtx = document.getElementById('forecastChart');
-    if (forecastCtx && state.predictions.forecast?.length > 0) {
-      new Chart(forecastCtx, {
-        type: 'bar',
-        data: {
-          labels: state.predictions.forecast.map(d => d.month),
-          datasets: [
-            { label: 'Income', data: state.predictions.forecast.map(d => d.predicted_income), backgroundColor: '#10b981' },
-            { label: 'Expenses', data: state.predictions.forecast.map(d => d.predicted_expenses), backgroundColor: '#ef4444' }
-          ]
-        },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
+    if (forecastCtx && state.predictions?.forecast?.length > 0) {
+      if (window.forecastChartInstance) {
+        window.forecastChartInstance.destroy();
+      }
+
+      try {
+        window.forecastChartInstance = new Chart(forecastCtx, {
+          type: 'bar',
+          data: {
+            labels: state.predictions.forecast.map(d => d.month || d.period),
+            datasets: [
+              { 
+                label: 'Predicted Income', 
+                data: state.predictions.forecast.map(d => d.predicted_income || 0), 
+                backgroundColor: '#10b981' 
+              },
+              { 
+                label: 'Predicted Expenses', 
+                data: state.predictions.forecast.map(d => d.predicted_expenses || 0), 
+                backgroundColor: '#ef4444' 
+              }
+            ]
+          },
+          options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#E5E7EB' }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { color: '#9CA3AF' },
+                grid: { color: '#1F2937' }
+              },
+              x: {
+                ticks: { color: '#9CA3AF' },
+                grid: { color: '#1F2937' }
+              }
+            }
+          }
+        });
+        console.log('✅ Forecast chart created');
+      } catch (error) {
+        console.error('❌ Forecast chart error:', error);
+      }
     }
-  }, 100);
+  }, 200);
 }
 
 // ========================================
@@ -1984,6 +3949,87 @@ async function uploadFile(file, uploadId) {
     alert('Error: ' + error.message);
   }
 }
+
+async function loadTransactions() {
+  try {
+    console.log('📊 Loading transactions...');
+    const response = await fetch(`${API_BASE}/transactions?limit=100`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const transactions = await response.json();
+    console.log('✅ Loaded', transactions.length, 'transactions');
+    
+    state.transactions = transactions;
+    
+    // Render table
+    renderTransactionsTable();
+    
+    return transactions;
+  } catch (error) {
+    console.error('❌ Error loading transactions:', error);
+    return [];
+  }
+}
+
+function renderTransactionsTable() {
+  const tbody = document.getElementById('txnBody');
+  const paginationContainer = document.getElementById('transactionsPagination');
+  
+  if (!tbody) return;
+  
+  if (state.transactions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #9CA3AF;">No transactions yet. Upload a file to get started.</td></tr>';
+    if (paginationContainer) paginationContainer.innerHTML = '';
+    return;
+  }
+  
+  // Apply filters
+  const filteredData = filterData(state.transactions, state.filters);
+  
+  // Update total items
+  state.pagination.transactions.totalItems = filteredData.length;
+  
+  // Get paginated data
+  const paginatedData = paginateData(
+    filteredData,
+    state.pagination.transactions.currentPage,
+    state.pagination.transactions.itemsPerPage
+  );
+  
+  // Render table rows
+  tbody.innerHTML = paginatedData.map(t => `
+    <tr>
+      <td>${t.date}</td>
+      <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${t.description}</td>
+      <td style="text-align: right; color: ${t.type === 'CREDIT' ? '#10b981' : '#ef4444'}; font-weight: 600;">
+        €${Math.abs(t.amount).toFixed(2)}
+      </td>
+      <td>
+        <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; 
+          background-color: ${t.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+          color: ${t.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+          ${t.type}
+        </span>
+      </td>
+      <td>${getCategoryName(t.categoryCode)}</td>
+      <td>
+        <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; 
+          background-color: rgba(16, 185, 129, 0.1); color: #10b981;">
+          ${((t.confidence || 0) * 100).toFixed(0)}%
+        </span>
+      </td>
+    </tr>
+  `).join('');
+  
+  // Render pagination
+  if (paginationContainer) {
+    paginationContainer.innerHTML = renderPagination('transactions', filteredData.length);
+  }
+}
+
 
 function previewUpload(uploadId) {
   const upload = state.uploads.find(u => u.id === uploadId);
