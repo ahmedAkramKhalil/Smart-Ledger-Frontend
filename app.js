@@ -49,7 +49,9 @@ const state = {
 // ========================================
 
 // const API_BASE = 'http://localhost:5001/api';
-const API_BASE = 'http://127.0.0.1:5001/api';
+// const API_BASE = 'http://127.0.0.1:5001/api';
+const API_BASE = '/api';
+
 const endpoints = {
   // Reports
   dashboard: `${API_BASE}/reports/dashboard`,
