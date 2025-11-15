@@ -3617,7 +3617,7 @@ async function uploadFile(file) {
 
     console.log('📨 Sending to backend...');
 
-    const response = await fetch('http://127.0.0.1:5001/api/files/upload', {
+    const response = await fetch('/api/files/upload', {
       method: 'POST',
       body: formData
     });
@@ -3881,7 +3881,7 @@ async function uploadFile(file, uploadId) {
 
     console.log('Sending to backend...');
 
-    const response = await fetch('http://127.0.0.1:5001/api/files/upload', {
+    const response = await fetch('/api/files/upload', {
       method: 'POST',
       body: formData
     });
