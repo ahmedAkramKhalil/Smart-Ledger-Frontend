@@ -5000,7 +5000,7 @@ function showEnhancedUploadOverlay(fileName) {
       
       <div style="padding: 15px; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 8px;">
         <div style="display: flex; align-items: start; gap: 12px;">
-          <div style="font-size: 24px;">🤖</div>
+          <div style="font-size: 24px;"> </div>
           <div>
             <div style="font-size: 12px; color: #3B82F6; font-weight: 600; margin-bottom: 4px;">
               ${state.language === 'en' ? 'AI-Powered Analysis' : 'Ανάλυση με Τεχνητή Νοημοσύνη'}
