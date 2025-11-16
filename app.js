@@ -2764,13 +2764,20 @@ function showUploadOverlay() {
         0%
       </div>
       
+      <!-- ⭐ TIME WARNING -->
+      <div style="margin-top: 25px; padding: 15px; background-color: rgba(255, 184, 0, 0.1); border-left: 3px solid #FFB800; border-radius: 6px;">
+        <div style="font-size: 11px; color: #FFB800; text-align: center; font-weight: 600;">
+          ⏱️ ${state.language === 'en' ? 'PLEASE WAIT - Processing Time: 1-2 Minutes' : 'ΠΑΡΑΚΑΛΩ ΠΕΡΙΜΕΝΕΤΕ - Χρόνος Επεξεργασίας: 1-2 Λεπτά'}
+        </div>
+      </div>
+      
       <!-- AI Analysis Notice -->
-      <div style="margin-top: 25px; padding: 15px; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 6px;">
+      <div style="margin-top: 15px; padding: 15px; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 6px;">
         <div style="font-size: 11px; color: #9CA3AF; text-align: center;">
           <strong style="color: #3B82F6;">🤖 AI Analysis in Progress</strong><br>
           ${state.language === 'en' 
-            ? 'Claude AI is analyzing your bank statement and categorizing transactions...' 
-            : 'Το Claude AI αναλύει το τραπεζικό σας αντίγραφο και κατηγοριοποιεί τις συναλλαγές...'}
+            ? 'Claude AI is analyzing your bank statement and categorizing transactions. This process cannot be interrupted.' 
+            : 'Το Claude AI αναλύει το τραπεζικό σας αντίγραφο. Η διαδικασία δεν μπορεί να διακοπεί.'}
         </div>
       </div>
     </div>
@@ -2781,7 +2788,6 @@ function showUploadOverlay() {
   // Prevent scrolling
   document.body.style.overflow = 'hidden';
 }
-
 // Update upload progress
 function updateUploadProgress(stage, message, percentage) {
   const icon = document.getElementById('uploadIcon');
@@ -3101,17 +3107,33 @@ async function loadRecentUploads() {
     return;
   }
 
+  // ⭐ SHOW LOADING STATE
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="5" style="text-align: center; padding: 30px;">
+        <div style="font-size: 32px; margin-bottom: 10px;">⏳</div>
+        <div style="color: #9CA3AF;">
+          ${state.language === 'en' ? 'Loading uploads...' : 'Φόρτωση αναβασμάτων...'}
+        </div>
+      </td>
+    </tr>
+  `;
+
   try {
     // Fetch from backend
-    const response = await fetch(`${API_BASE}/uploads`);
+    const response = await fetch(`${API_BASE}/files`);
     if (response.ok) {
       const uploads = await response.json();
       state.uploads = uploads;
+      console.log('✅ Fetched', uploads.length, 'uploads from backend');
+    } else {
+      console.error('❌ Failed to fetch uploads:', response.status);
     }
   } catch (error) {
-    console.error('Error fetching uploads:', error);
+    console.error('❌ Error fetching uploads:', error);
   }
 
+  // ⭐ RENDER RESULTS IMMEDIATELY
   if (!state.uploads || state.uploads.length === 0) {
     tbody.innerHTML = `
       <tr>
@@ -3182,7 +3204,6 @@ async function loadRecentUploads() {
 
   console.log('✅ Loaded', state.uploads.length, 'uploads');
 }
-
 
 // Show notification toast
 function showNotification(message, type = 'info') {
@@ -4666,79 +4687,56 @@ function handleFileSelect(e) {
 // FILE UPLOAD - WORKING VERSION
 // ========================================
 
-async function uploadFile(file) {
-  if (!file) {
-    console.error('No file provided');
+async function uploadFile(files) {
+  const file = files[0] || files;
+  
+  if (!file || !file.name) {
+    console.error('❌ No valid file provided');
     return;
   }
 
   try {
-    console.log('📤 Upload starting');
-    console.log('📋 File:', file.name);
+    console.log('📤 Upload starting:', file.name);
     
-    // Create upload entry in state
-    const uploadId = 'upload_' + Date.now();
-    state.uploads.push({
-      id: uploadId,
-      fileName: file.name,
-      fileType: file.type,
-      status: 'uploading',
-      transactionCount: 0,
-      transactions: [],
-      error: null
-    });
-
-    // Show progress
-    const progressContainer = document.getElementById('uploadProgress');
-    if (progressContainer) {
-      progressContainer.style.display = 'block';
-    }
-
+    // Show full-screen loading overlay
+    showUploadOverlay();
+    updateUploadProgress('preparing', 'Preparing file...', 10);
+    
+    await sleep(500);
+    
+    // Create FormData
     const formData = new FormData();
     formData.append('file', file);
-
-    console.log('📨 Sending to backend...');
-
-    const response = await fetch('/api/files/upload', {
+    
+    updateUploadProgress('uploading', 'Uploading file to server...', 20);
+    
+    // Upload file
+    const response = await fetch(`${API_BASE}/files/upload`, {
       method: 'POST',
       body: formData
     });
 
-    console.log('📊 Response status:', response.status);
-
-    const data = await response.json();
-    console.log('📊 Response data:', data);
-
-    // Find upload entry
-    const idx = state.uploads.findIndex(u => u.id === uploadId);
-    
-    if (idx === -1) {
-      console.error('❌ Upload not found');
-      alert('Error: Upload not found');
-      if (progressContainer) progressContainer.style.display = 'none';
-      return;
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
 
-    if (!response.ok) {
-      console.error('❌ Backend error:', data.error);
-      state.uploads[idx].status = 'failed';
-      state.uploads[idx].error = data.error || 'Unknown error';
-      render();
-      if (progressContainer) progressContainer.style.display = 'none';
-      alert('❌ Failed: ' + data.error);
-      return;
+    // ⭐ UPDATE THIS MESSAGE TO WARN ABOUT WAIT TIME
+    updateUploadProgress('analyzing', 
+      'AI is analyzing your data... This may take 1-2 minutes. Please wait.', 
+      40);
+    
+    const data = await response.json();
+    console.log('✅ Upload response:', data);
+
+    if (data.error) {
+      throw new Error(data.error);
     }
 
     if (data.success && data.transactions) {
-      console.log('✅ Upload successful');
+      updateUploadProgress('processing', 'Processing transactions...', 70);
+      await sleep(500);
       
-      state.uploads[idx].status = 'completed';
-      state.uploads[idx].transactionCount = data.transactionCount || data.transactions.length;
-      state.uploads[idx].transactions = data.transactions;
-      state.uploads[idx].analysis = data.analysis;
-      state.uploads[idx].summary = data.summary;
-      
-      // Map transactions correctly
+      // Map transactions
       const mappedTransactions = data.transactions.map(txn => ({
         id: txn.id,
         date: txn.date,
@@ -4754,52 +4752,52 @@ async function uploadFile(file) {
       
       state.transactions.push(...mappedTransactions);
       
-      // Show preview
-      displayFilePreview(state.uploads[idx]);
+      updateUploadProgress('finalizing', 'Finalizing...', 90);
+      await sleep(300);
       
-      // Hide progress
-      if (progressContainer) progressContainer.style.display = 'none';
+      updateUploadProgress('complete', 'Upload complete!', 100);
+      await sleep(500);
       
-      render();
+      // Hide overlay
+      hideUploadOverlay();
       
-      const msg = state.language === 'en'
-        ? `✅ Success: ${data.transactionCount || data.transactions.length} transactions imported`
-        : `✅ Επιτυχία: ${data.transactionCount || data.transactions.length} συναλλαγές εισήχθησαν`;
+      // Show success dialog
+      showSuccessDialog(data);
       
-      alert(msg);
+      // ⭐ CRITICAL: Refresh the uploads list immediately
+      console.log('🔄 Refreshing uploads list...');
+      await loadRecentUploads();
       
-      // Load dashboard to refresh
-      setTimeout(() => loadDashboard(), 1000);
+      // ⭐ If we're still on the upload page, re-render it
+      if (state.currentPage === 'upload') {
+        console.log('📄 Re-rendering upload page...');
+        const pageContent = document.querySelector('.page-content');
+        if (pageContent) {
+          pageContent.innerHTML = renderUpload();
+          // Re-attach event listeners
+          await loadRecentUploads();
+        }
+      }
       
     } else {
-      console.error('❌ Invalid response:', data);
-      state.uploads[idx].status = 'failed';
-      state.uploads[idx].error = 'Invalid response';
-      render();
-      if (progressContainer) progressContainer.style.display = 'none';
-      alert('Invalid response from server');
+      throw new Error('Invalid response from server');
     }
 
   } catch (error) {
     console.error('❌ Upload error:', error);
     
-    if (progressContainer) progressContainer.style.display = 'none';
+    hideUploadOverlay();
     
-    const idx = state.uploads.findIndex(u => u.fileName === file.name);
-    if (idx !== -1) {
-      state.uploads[idx].status = 'failed';
-      state.uploads[idx].error = error.message;
-      render();
-    }
-    
-    alert('Error: ' + error.message);
+    showNotification(
+      `${state.language === 'en' ? '❌ Upload failed: ' : '❌ Το ανέβασμα απέτυχε: '}${error.message}`,
+      'error'
+    );
   }
-
+  
   // Reset file input
   const fileInput = document.getElementById('fileInput');
   if (fileInput) fileInput.value = '';
 }
-
 function displayFilePreview(upload) {
   console.log('🔍 Displaying preview for:', upload.fileName);
   
