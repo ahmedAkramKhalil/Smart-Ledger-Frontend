@@ -50,7 +50,7 @@ const state = {
 
 // const API_BASE = 'http://localhost:5001/api';
 // const API_BASE = 'http://127.0.0.1:5001/api';
-const API_BASE = '/api';
+const API_BASE = 'http://127.0.0.1:5001/api';
 
 const endpoints = {
   // Reports
@@ -75,7 +75,13 @@ const endpoints = {
   
   // Transactions
   transactions: `${API_BASE}/transactions`,
-  upload: `${API_BASE}/files/upload`
+  upload: `${API_BASE}/files/upload`,
+  uploads: `${API_BASE}/files`, // NEW - list uploads
+  uploadsList: `${API_BASE}/uploads`, // List of uploads
+
+
+  categories: `${API_BASE}/categories`
+
 };
 
 // ========================================
@@ -1517,12 +1523,20 @@ async function loadDashboard() {
 async function loadAccounts() {
   try {
     console.log('📊 Loading accounts...');
-    const accounts = await fetch(endpoints.accounts).then(r => r.json());
+    const response = await fetch(endpoints.accounts);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const accounts = await response.json();
     state.accounts = accounts;
-    console.log('✅ Accounts loaded:', accounts.length);
+    
+    console.log('✅ Accounts loaded:', accounts.length, accounts);
     return accounts;
   } catch (error) {
     console.error('❌ Error loading accounts:', error);
+    state.accounts = [];
     return [];
   }
 }
@@ -1540,19 +1554,50 @@ async function loadAccountLedger(accountId) {
   }
 }
 
+// This should already be in your code - it will now fetch real predictions!
 async function loadPredictions() {
   try {
     console.log('🔮 Loading predictions...');
+    
+    if (!state.transactions || state.transactions.length < 5) {
+      console.warn('⚠️ Not enough data for predictions');
+      state.predictions = { 
+        forecast: [], 
+        recurring: [],
+        hasEnoughData: false 
+      };
+      return state.predictions;
+    }
+    
     const [forecast, recurring] = await Promise.all([
-      fetch(`${endpoints.forecast}?months=3`).then(r => r.json()),
-      fetch(`${endpoints.recurring}?minOccurrences=3`).then(r => r.json())
+      fetch(`${endpoints.forecast}?months=3`)
+        .then(r => r.ok ? r.json() : [])
+        .catch(e => { console.error('Forecast error:', e); return []; }),
+      fetch(`${endpoints.recurring}?minOccurrences=2`)
+        .then(r => r.ok ? r.json() : [])
+        .catch(e => { console.error('Recurring error:', e); return []; })
     ]);
-    state.predictions = { forecast, recurring };
-    console.log('✅ Predictions loaded');
-    return { forecast, recurring };
+    
+    state.predictions = { 
+      forecast, 
+      recurring,
+      hasEnoughData: true 
+    };
+    
+    console.log('✅ Predictions loaded:', {
+      forecastCount: forecast.length,
+      recurringCount: recurring.length
+    });
+    
+    return state.predictions;
   } catch (error) {
     console.error('❌ Error loading predictions:', error);
-    return { forecast: [], recurring: [] };
+    state.predictions = { 
+      forecast: [], 
+      recurring: [],
+      hasEnoughData: false 
+    };
+    return state.predictions;
   }
 }
 
@@ -1720,6 +1765,16 @@ function renderSidebar() {
         </li>
       </ul>
       
+       <!-- Settings & Tutorial -->
+      <div style="padding: 15px; border-top: 0px solid #1F2937; margin-top: auto;">
+        <button 
+          onclick="startTutorial()" 
+          style="width: 100%; padding: 8px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px; margin-bottom: 8px;">
+          ${state.language === 'en' ? '🎓 Show Tutorial' : '🎓 Εμφάνιση Tutorial'}
+        </button>
+      </div>
+
+
       <!-- Language Toggle - ENHANCED -->
       <div class="sidebar-footer">
         <div style="display: flex; gap: 5px; margin-bottom: 10px;">
@@ -1737,6 +1792,8 @@ function renderSidebar() {
           </button>
         </div>
         
+
+
         <button 
           class="lang-toggle" 
           onclick="logout()"
@@ -1779,10 +1836,45 @@ function renderPageContent() {
 
 function renderDashboard() {
   const summary = state.reports.summary || {};
+  const hasData = state.transactions && state.transactions.length > 0;
   
   return `
-    <div>
-      <h2>${t('dashboard.welcome')}, ${state.currentUser?.username}! 👋</h2>
+  <div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">${t('dashboard.welcome')}, ${state.currentUser?.username}! 👋</h2>
+        
+        <!-- Quick Upload Button - SMALLER VERSION -->
+        <button 
+          id="uploadButton"
+          onclick="changePage('upload')" 
+          class="btn-primary"
+          style="padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 16px;">📤</span>
+          <span>${state.language === 'en' ? 'Upload Statement' : 'Ανέβασμα'}</span>
+        </button>
+      </div>
+      
+      ${!hasData ? `
+        <!-- Empty State -->
+        <div class="card" style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, rgba(255, 184, 0, 0.1) 0%, rgba(255, 184, 0, 0.05) 100%); border: 2px dashed #FFB800;">
+          <div style="font-size: 64px; margin-bottom: 20px;">📊</div>
+          <h3 style="margin: 0 0 10px 0; color: #FFB800;">
+            ${state.language === 'en' ? 'Get Started!' : 'Ξεκινήστε!'}
+          </h3>
+          <p style="color: #9CA3AF; margin-bottom: 25px; max-width: 500px; margin-left: auto; margin-right: auto;">
+            ${state.language === 'en' 
+              ? 'Upload your bank statement to automatically categorize transactions and generate financial insights.' 
+              : 'Ανεβάστε το τραπεζικό σας αντίγραφο για αυτόματη κατηγοριοποίηση συναλλαγών και οικονομικές αναλύσεις.'}
+          </p>
+          <button 
+            onclick="changePage('upload')" 
+            class="btn-primary"
+            style="padding: 15px 30px; font-size: 16px;">
+            ${state.language === 'en' ? '📤 Upload Your First File' : '📤 Ανεβάστε το Πρώτο Αρχείο'}
+          </button>
+        </div>
+      ` : ''}
+      
       
       <!-- Summary Cards -->
       <div class="dashboard-grid">
@@ -1857,6 +1949,20 @@ function renderDashboard() {
   </table>
 </div>
   `;
+}
+
+
+function skipTutorial() {
+  // Skip for this session only
+  sessionStorage.setItem('tutorialSkipped', 'true');
+  closeTutorial();
+}
+
+
+function disableTutorial() {
+  // Disable permanently
+  localStorage.setItem('tutorialDisabled', 'true');
+  closeTutorial();
 }
 
 // ========================================
@@ -1939,28 +2045,21 @@ function renderReports() {
   const summary = state.reports?.summary || {};
   
   return `
-
-  
     <div style="height: calc(100vh - 100px); overflow-y: auto; padding: 20px;">
       
       <!-- Page Header -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0; color: #FFB800;">📊 ${t('nav.reports')}</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <h2 style="margin: 0; color: #FFB800; font-weight: 300;">📊 ${t('nav.reports')}</h2>
         <button 
           onclick="exportReports()" 
           class="btn-secondary"
-          style="padding: 8px 16px;">
+          style="padding: 8px 16px; font-size: 13px;">
           ${state.language === 'en' ? '📥 Export PDF' : '📥 Εξαγωγή PDF'}
         </button>
       </div>
 
-
-   
-
-
-
       <!-- Summary Cards -->
-      <div class="dashboard-grid" style="margin-bottom: 25px;">
+      <div class="dashboard-grid" style="margin-bottom: 30px;">
         <div class="card card-gold">
           <div class="card-title">${state.language === 'en' ? 'Total Balance' : 'Συνολικό Υπόλοιπο'}</div>
           <div class="card-value">€${((summary.credit_total || 0) - Math.abs(summary.debit_total || 0)).toFixed(2)}</div>
@@ -1997,9 +2096,9 @@ function renderReports() {
       </div>
 
       <!-- Filters Section -->
-      <div class="card" style="margin-bottom: 20px;">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">
-          ${state.language === 'en' ? 'Date Range & Filters' : 'Εύρος Ημερομηνιών & Φίλτρα'}
+      <div class="card" style="margin-bottom: 25px;">
+        <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+          ${state.language === 'en' ? '🔍 Date Range & Filters' : '🔍 Εύρος Ημερομηνιών & Φίλτρα'}
         </h3>
         
         <!-- Quick Date Presets -->
@@ -2024,88 +2123,110 @@ function renderReports() {
           </button>
         </div>
         
-<!-- Custom Date Range -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-  <div>
-    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
-      ${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}
-    </label>
-    <input 
-      type="date" 
-      id="reportDateFrom" 
-      style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
-  </div>
-  <div>
-    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
-      ${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}
-    </label>
-    <input 
-      type="date" 
-      id="reportDateTo" 
-      style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
-  </div>
-  <div style="display: flex; align-items: flex-end;">
-    <button class="btn-primary" onclick="loadReportsData()" style="width: 100%; padding: 8px;">
-      ${state.language === 'en' ? '🔍 Generate Report' : '🔍 Δημιουργία Αναφοράς'}
-    </button>
-  </div>
-</div>
+        <!-- Custom Date Range -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 15px; align-items: end;">
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}
+            </label>
+            <input 
+              type="date" 
+              id="reportDateFrom" 
+              style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}
+            </label>
+            <input 
+              type="date" 
+              id="reportDateTo" 
+              style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+          </div>
+          <div>
+            <button class="btn-primary" onclick="loadReportsData()" style="width: 100%; padding: 8px 16px; white-space: nowrap;">
+              ${state.language === 'en' ? '🔍 Generate' : '🔍 Δημιουργία'}
+            </button>
+          </div>
+        </div>
+      </div>
 
-<!-- NEW: Add data range info below the filters -->
-<div id="dataRangeInfo" style="margin-top: 10px; padding: 8px; background-color: rgba(255, 184, 0, 0.1); border-left: 3px solid #FFB800; border-radius: 4px; font-size: 12px; color: #9CA3AF; display: none;">
-  <span id="dataRangeText"></span>
-</div>
-   <!-- Charts Grid -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px;">
-  
-  <!-- Cash Flow Line Chart -->
-  <div class="card">
-    <h3 style="margin-bottom: 15px; font-weight: 300;">
-      ${state.language === 'en' ? '📈 Cash Flow Trend' : '📈 Τάση Ταμειακής Ροής'}
-      <span id="cashFlowDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
-    </h3>
-    <div style="position: relative; height: 300px; width: 100%;">
-      <canvas id="cashFlowLineChart"></canvas>
-    </div>
-  </div>
+      <!-- Charts Grid - 2 PER ROW -->
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 25px;">
+        
+        <!-- Row 1: Cash Flow + Category Pie -->
+        <div class="card">
+          <h3 style="margin-bottom: 12px; font-weight: 300; font-size: 15px;">
+            ${state.language === 'en' ? '📈 Cash Flow Trend' : '📈 Τάση Ταμειακής Ροής'}
+            <span id="cashFlowDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+          </h3>
+          <div style="position: relative; height: 280px; width: 100%;">
+            <canvas id="cashFlowLineChart"></canvas>
+          </div>
+        </div>
 
-  <!-- Category Distribution Pie Chart -->
-  <div class="card">
-    <h3 style="margin-bottom: 15px; font-weight: 300;">
-      ${state.language === 'en' ? '🥧 Income vs Expenses' : '🥧 Εισόδημα vs Έξοδα'}
-      <span id="categoryDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
-    </h3>
-    <div style="position: relative; height: 300px; width: 100%;">
-      <canvas id="categoryChart"></canvas>
-    </div>
-  </div>
+        <div class="card">
+          <h3 style="margin-bottom: 12px; font-weight: 300; font-size: 15px;">
+            ${state.language === 'en' ? '🥧 Income vs Expenses' : '🥧 Εισόδημα vs Έξοδα'}
+            <span id="categoryDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+          </h3>
+          <div style="position: relative; height: 280px; width: 100%;">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
 
-  <!-- Monthly Comparison Bar Chart -->
-  <div class="card">
-    <h3 style="margin-bottom: 15px; font-weight: 300;">
-      ${state.language === 'en' ? '📊 Monthly Comparison' : '📊 Μηνιαία Σύγκριση'}
-      <span id="monthlyDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
-    </h3>
-    <div style="position: relative; height: 300px; width: 100%;">
-      <canvas id="monthlyChart"></canvas>
-    </div>
-  </div>
+        <!-- Row 2: Monthly Comparison + Top Categories -->
+        <div class="card">
+          <h3 style="margin-bottom: 12px; font-weight: 300; font-size: 15px;">
+            ${state.language === 'en' ? '📊 Monthly Comparison' : '📊 Μηνιαία Σύγκριση'}
+            <span id="monthlyDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+          </h3>
+          <div style="position: relative; height: 280px; width: 100%;">
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </div>
 
-  <!-- Top Categories Bar Chart -->
-  <div class="card">
-    <h3 style="margin-bottom: 15px; font-weight: 300;">
-      ${state.language === 'en' ? '🏆 Top Categories' : '🏆 Κορυφαίες Κατηγορίες'}
-      <span id="topCatDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
-    </h3>
-    <div style="position: relative; height: 300px; width: 100%;">
-      <canvas id="topCategoriesChart"></canvas>
-    </div>
-  </div>
-</div>
+        <div class="card">
+          <h3 style="margin-bottom: 12px; font-weight: 300; font-size: 15px;">
+            ${state.language === 'en' ? '🏆 Top Categories' : '🏆 Κορυφαίες Κατηγορίες'}
+            <span id="topCatDateRange" style="font-size: 11px; color: #9CA3AF; font-weight: 400; display: block; margin-top: 5px;"></span>
+          </h3>
+          <div style="position: relative; height: 280px; width: 100%;">
+            <canvas id="topCategoriesChart"></canvas>
+          </div>
+        </div>
+      </div>
 
-      <!-- Category Breakdown Table -->
-      <div class="card" style="margin-bottom: 20px;">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">
+      <!-- Transaction Summary Table -->
+      <div class="card" style="margin-bottom: 25px;">
+        <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+          ${state.language === 'en' ? '📊 Transaction Summary' : '📊 Περίληψη Συναλλαγών'}
+        </h3>
+        <div style="overflow-x: auto;">
+          <table class="table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Total Amount' : 'Συνολικό Ποσό'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Average' : 'Μέσος Όρος'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Percentage' : 'Ποσοστό'}</th>
+              </tr>
+            </thead>
+            <tbody id="transactionSummaryBody">
+              <tr>
+                <td colspan="5" style="text-align: center; padding: 20px;">
+                  <span style="color: #9CA3AF;">${t('common.loading')}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Category Analysis Table -->
+      <div class="card" style="margin-bottom: 25px;">
+        <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
           ${state.language === 'en' ? '📋 Category Analysis' : '📋 Ανάλυση Κατηγοριών'}
         </h3>
         <div style="overflow-x: auto;">
@@ -2132,45 +2253,19 @@ function renderReports() {
         </div>
       </div>
 
-<!-- Transaction Summary by Type -->
-<div class="card">
-  <h3 style="margin-bottom: 15px; font-weight: 300;">
-    ${state.language === 'en' ? '📊 Transaction Summary' : '📊 Περίληψη Συναλλαγών'}
-  </h3>
-  <div style="overflow-x: auto;">
-    <table class="table" style="width: 100%;">
-      <thead>
-        <tr>
-          <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
-          <th style="text-align: right;">${state.language === 'en' ? 'Count' : 'Αριθμός'}</th>
-          <th style="text-align: right;">${state.language === 'en' ? 'Total Amount' : 'Συνολικό Ποσό'}</th>
-          <th style="text-align: right;">${state.language === 'en' ? 'Average' : 'Μέσος Όρος'}</th>
-          <th style="text-align: right;">${state.language === 'en' ? 'Percentage' : 'Ποσοστό'}</th>
-        </tr>
-      </thead>
-      <tbody id="transactionSummaryBody">
-        <tr>
-          <td colspan="5" style="text-align: center; padding: 20px;">
-            <span style="color: #9CA3AF;">${t('common.loading')}</span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Category Breakdown by Type -->
-<div class="card">
-  <h3 style="margin-bottom: 15px; font-weight: 300;">
-    ${state.language === 'en' ? '📊 Category Distribution' : '📊 Κατανομή Κατηγοριών'}
-  </h3>
-  <div style="position: relative; height: 300px; width: 100%;">
-    <canvas id="categoryBreakdownChart"></canvas>
-  </div>
-</div>
-
+      <!-- Category Distribution Chart - Full Width -->
+      <div class="card">
+        <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+          ${state.language === 'en' ? '📊 Category Distribution' : '📊 Κατανομή Κατηγοριών'}
+        </h3>
+        <div style="position: relative; height: 320px; width: 100%;">
+          <canvas id="categoryBreakdownChart"></canvas>
+        </div>
+      </div>
+    </div>
   `;
 }
+
 
 
 // Show available data range info
@@ -2268,90 +2363,209 @@ function setReportDateRange(preset) {
 // ========================================
 
 function renderLedger() {
+  const hasAccounts = state.accounts && state.accounts.length > 0;
+  const selectedAccountData = hasAccounts 
+    ? state.accounts.find(a => a.id === state.selectedAccount) 
+    : null;
+  
   return `
     <div>
-      <div style="margin-bottom: 20px; background-color: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
-        <label style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">
-          ${t('accounts.accountName')}:
-        </label>
-        <select 
-          id="ledgerAccountSelect" 
-          onchange="loadAccountLedger(this.value).then(() => renderLedgerTable())"
-          style="width: 100%; padding: 10px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
-          ${state.accounts.length > 0 ? 
-            state.accounts.map(a => 
-              `<option value="${a.id}" ${a.id === state.selectedAccount ? 'selected' : ''}>${a.account_name} (${a.account_number})</option>`
-            ).join('') 
-            : '<option>No accounts available</option>'}
-        </select>
+      <!-- Page Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <h2 style="margin: 0; color: #FFB800; font-weight: 300;">📖 ${t('ledger.title')}</h2>
+        ${state.ledger && state.ledger.length > 0 ? `
+          <button 
+            onclick="exportLedger()" 
+            class="btn-secondary"
+            style="padding: 8px 16px; font-size: 13px;">
+            ${state.language === 'en' ? '📥 Export Ledger' : '📥 Εξαγωγή Καθολικού'}
+          </button>
+        ` : ''}
       </div>
-      
-      <div class="card">
-        <h3 style="margin-bottom: 15px;">${t('ledger.title')}</h3>
-        
-        <div style="overflow-x: auto;">
-          <table class="table" style="width: 100%;">
-            <thead>
-              <tr>
-                <th>${t('ledger.date')}</th>
-                <th>${t('ledger.description')}</th>
-                <th>${t('ledger.debit')}</th>
-                <th>${t('ledger.credit')}</th>
-                <th>${t('ledger.balance')}</th>
-                <th>${t('ledger.reconciled')}</th>
-              </tr>
-            </thead>
-            <tbody id="ledgerBody">
-              <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">${t('common.loading')}</td></tr>
-            </tbody>
-          </table>
-        </div>
-        
-        <!-- Pagination -->
-        <div id="ledgerPagination"></div>
-      </div>
-    </div>
-  `;
-}// ========================================
-// PREDICTIONS PAGE
-// ========================================
 
-function renderPredictions() {
-  return `
-    <div>
-      <h2>${t('predictions.title')} 🔮</h2>
-      
-      <div class="card" style="margin-top: 20px;">
-        <h3>${t('predictions.cashFlowForecast')}</h3>
-        <div style="position: relative; height: 350px; width: 100%;">
-          <canvas id="forecastChart"></canvas>
+      ${!hasAccounts ? `
+        <!-- No Accounts State -->
+        <div class="card" style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border: 2px dashed #ef4444;">
+          <div style="font-size: 64px; margin-bottom: 20px;">🏦</div>
+          <h3 style="margin: 0 0 10px 0; color: #ef4444;">
+            ${state.language === 'en' ? 'No Accounts Found' : 'Δεν Βρέθηκαν Λογαριασμοί'}
+          </h3>
+          <p style="color: #9CA3AF; margin-bottom: 25px; max-width: 500px; margin-left: auto; margin-right: auto;">
+            ${state.language === 'en' 
+              ? 'You need to create at least one account to view ledger entries.' 
+              : 'Πρέπει να δημιουργήσετε τουλάχιστον έναν λογαριασμό για να δείτε καταχωρήσεις.'}
+          </p>
+          <button 
+            onclick="changePage('accounts')" 
+            class="btn-primary"
+            style="padding: 15px 30px; font-size: 16px;">
+            ${state.language === 'en' ? '➕ Create Account' : '➕ Δημιουργία Λογαριασμού'}
+          </button>
         </div>
-      </div>      
-      <div class="card" style="margin-top: 20px;">
-        <h3>${t('predictions.nextTransactions')}</h3>
-        <table id="predictionsTable" class="table">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Predicted Income</th>
-              <th>Predicted Expenses</th>
-              <th>Net Flow</th>
-              <th>Confidence</th>
-            </tr>
-          </thead>
-          <tbody id="predictionsBody">
-            <tr><td colspan="5">${t('common.loading')}</td></tr>
-          </tbody>
-        </table>
-      </div>
+      ` : `
+        <!-- Account Selection & Info -->
+        <div class="card" style="margin-bottom: 25px;">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 20px; align-items: end;">
+            
+            <!-- Account Selector -->
+            <div>
+              <label style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; font-weight: 600;">
+                ${t('accounts.accountName')}
+              </label>
+              <select 
+                id="ledgerAccountSelect" 
+                onchange="handleLedgerAccountChange(this.value)"
+                style="width: 100%; padding: 12px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 14px; font-weight: 500;">
+                ${state.accounts.map(a => 
+                  `<option value="${a.id}" ${a.id === state.selectedAccount ? 'selected' : ''}>
+                    ${a.account_name} ${a.account_number ? '(' + a.account_number + ')' : ''}
+                  </option>`
+                ).join('')}
+              </select>
+            </div>
+            
+            <!-- Current Balance -->
+            ${selectedAccountData ? `
+              <div style="text-align: center; padding: 15px; background-color: rgba(255, 184, 0, 0.1); border-radius: 8px; border: 1px solid rgba(255, 184, 0, 0.3);">
+                <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px;">
+                  ${state.language === 'en' ? 'Current Balance' : 'Τρέχον Υπόλοιπο'}
+                </div>
+                <div style="font-size: 22px; font-weight: 700; color: #FFB800;">
+                  ${formatCurrency(selectedAccountData.current_balance || 0)}
+                </div>
+              </div>
+              
+              <!-- Account Type -->
+              <div style="text-align: center; padding: 15px; background-color: var(--bg-hover); border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px;">
+                  ${state.language === 'en' ? 'Account Type' : 'Τύπος Λογαριασμού'}
+                </div>
+                <div style="font-size: 16px; font-weight: 600; color: var(--text-primary); text-transform: capitalize;">
+                  ${selectedAccountData.account_type || 'N/A'}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card" style="margin-bottom: 25px;">
+          <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 15px;">
+            ${state.language === 'en' ? '🔍 Filters' : '🔍 Φίλτρα'}
+          </h3>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 15px; align-items: end;">
+            <div>
+              <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+                ${state.language === 'en' ? 'Date From' : 'Από Ημερομηνία'}
+              </label>
+              <input 
+                type="date" 
+                id="ledgerDateFrom" 
+                style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+                ${state.language === 'en' ? 'Date To' : 'Έως Ημερομηνία'}
+              </label>
+              <input 
+                type="date" 
+                id="ledgerDateTo" 
+                style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+                ${state.language === 'en' ? 'Status' : 'Κατάσταση'}
+              </label>
+              <select 
+                id="ledgerReconciled"
+                style="width: 100%; padding: 8px; border-radius: 6px; background-color: #121820; border: 1px solid #1F2937; color: #E5E7EB;">
+                <option value="all">${state.language === 'en' ? 'All' : 'Όλα'}</option>
+                <option value="1">${state.language === 'en' ? 'Reconciled' : 'Συμφωνημένα'}</option>
+                <option value="0">${state.language === 'en' ? 'Pending' : 'Εκκρεμή'}</option>
+              </select>
+            </div>
+            <div>
+              <button class="btn-primary" onclick="applyLedgerFilters()" style="padding: 8px 16px; white-space: nowrap;">
+                ${state.language === 'en' ? 'Apply' : 'Εφαρμογή'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ledger Table -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; font-weight: 300; font-size: 16px;">
+              ${state.language === 'en' ? '📊 Ledger Entries' : '📊 Καταχωρήσεις Καθολικού'}
+            </h3>
+            <div style="font-size: 12px; color: #9CA3AF;">
+              ${state.ledger ? state.ledger.length : 0} ${state.language === 'en' ? 'entries' : 'καταχωρήσεις'}
+            </div>
+          </div>
+          
+          <div style="overflow-x: auto;">
+            <table class="table" style="width: 100%;">
+              <thead>
+                <tr style="background-color: var(--bg-hover);">
+                  <th style="width: 100px;">${t('ledger.date')}</th>
+                  <th style="min-width: 250px;">${t('ledger.description')}</th>
+                  <th style="text-align: right; width: 120px;">${t('ledger.debit')}</th>
+                  <th style="text-align: right; width: 120px;">${t('ledger.credit')}</th>
+                  <th style="text-align: right; width: 140px; background-color: rgba(255, 184, 0, 0.1);">${t('ledger.balance')}</th>
+                  <th style="text-align: center; width: 80px;">${t('ledger.reconciled')}</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerBody">
+                <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">${t('common.loading')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Pagination -->
+          <div id="ledgerPagination"></div>
+        </div>
+      `}
     </div>
   `;
 }
+// Handle ledger account change
+async function handleLedgerAccountChange(accountId) {
+  console.log('📊 Changing ledger account to:', accountId);
+  
+  if (!accountId) {
+    state.selectedAccount = null;
+    state.ledger = [];
+    renderLedgerTable();
+    return;
+  }
+  
+  state.selectedAccount = accountId;
+  
+  // Show loading
+  const tbody = document.getElementById('ledgerBody');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 30px;">
+          <div style="font-size: 32px; margin-bottom: 10px;">⏳</div>
+          <div style="color: #9CA3AF;">${state.language === 'en' ? 'Loading ledger entries...' : 'Φόρτωση καταχωρήσεων...'}</div>
+        </td>
+      </tr>
+    `;
+  }
+  
+  // Load ledger
+  await loadAccountLedger(accountId);
+  
+  // Render table
+  renderLedgerTable();
+}
 
-// ========================================
-// TRANSACTIONS & UPLOAD (KEEP EXISTING)
-// ========================================
-
+// Apply ledger filters
+function applyLedgerFilters() {
+  renderLedgerTable();
+}
 
 // ========================================
 // FILE UPLOAD HANDLERS
@@ -2399,7 +2613,6 @@ function handleFileSelect(e) {
 }
 
 async function uploadFile(files) {
-  // Handle both single file and FileList
   const file = files[0] || files;
   
   if (!file || !file.name) {
@@ -2410,34 +2623,17 @@ async function uploadFile(files) {
   try {
     console.log('📤 Upload starting:', file.name);
     
-    // Show progress UI
-    const progressContainer = document.getElementById('uploadProgress');
-    const previewContainer = document.getElementById('previewContainer');
+    // Show full-screen loading overlay
+    showUploadOverlay();
+    updateUploadProgress('preparing', 'Preparing file...', 10);
     
-    if (progressContainer) {
-      progressContainer.style.display = 'block';
-    }
-    if (previewContainer) {
-      previewContainer.style.display = 'none';
-    }
-    
-    // Update progress bar
-    updateProgressBar(10);
+    await sleep(500);
     
     // Create FormData
     const formData = new FormData();
     formData.append('file', file);
     
-    // Simulate progress
-    let progress = 10;
-    const progressInterval = setInterval(() => {
-      if (progress < 80) {
-        progress += Math.random() * 20;
-        updateProgressBar(Math.min(progress, 80));
-      }
-    }, 200);
-
-    console.log('📨 Sending to backend...');
+    updateUploadProgress('uploading', 'Uploading file to server...', 20);
     
     // Upload file
     const response = await fetch(`${API_BASE}/files/upload`, {
@@ -2445,13 +2641,12 @@ async function uploadFile(files) {
       body: formData
     });
 
-    clearInterval(progressInterval);
-    updateProgressBar(100);
-
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
 
+    updateUploadProgress('analyzing', 'Analyzing with AI...', 40);
+    
     const data = await response.json();
     console.log('✅ Upload response:', data);
 
@@ -2460,24 +2655,10 @@ async function uploadFile(files) {
     }
 
     if (data.success && data.transactions) {
-      // Create upload record
-      const uploadRecord = {
-        id: 'upload_' + Date.now(),
-        fileName: file.name,
-        fileType: file.type || 'unknown',
-        status: 'completed',
-        transactionCount: data.transactionCount || data.transactions.length,
-        transactions: data.transactions,
-        analysis: data.analysis,
-        summary: data.summary,
-        uploadDate: new Date().toISOString(),
-        error: null
-      };
+      updateUploadProgress('processing', 'Processing transactions...', 70);
+      await sleep(500);
       
-      // Add to state
-      state.uploads.unshift(uploadRecord); // Add to beginning
-      
-      // Map and add transactions to state
+      // Map transactions
       const mappedTransactions = data.transactions.map(txn => ({
         id: txn.id,
         date: txn.date,
@@ -2493,22 +2674,20 @@ async function uploadFile(files) {
       
       state.transactions.push(...mappedTransactions);
       
-      console.log('✅ Upload successful:', uploadRecord);
+      updateUploadProgress('finalizing', 'Finalizing...', 90);
+      await sleep(300);
       
-      // Show success message
-      const msg = state.language === 'en'
-        ? `✅ Success! ${uploadRecord.transactionCount} transactions imported from ${file.name}`
-        : `✅ Επιτυχία! ${uploadRecord.transactionCount} συναλλαγές από ${file.name}`;
+      updateUploadProgress('complete', 'Upload complete!', 100);
+      await sleep(500);
       
-      // Hide progress, show preview
-      setTimeout(() => {
-        if (progressContainer) progressContainer.style.display = 'none';
-        displayFilePreview(uploadRecord);
-        loadRecentUploads(); // Refresh the uploads table
-        
-        // Show success notification
-        showNotification(msg, 'success');
-      }, 500);
+      // Hide overlay
+      hideUploadOverlay();
+      
+      // Show success dialog
+      showSuccessDialog(data);
+      
+      // Refresh uploads table
+      await loadRecentUploads();
       
     } else {
       throw new Error('Invalid response from server');
@@ -2517,21 +2696,264 @@ async function uploadFile(files) {
   } catch (error) {
     console.error('❌ Upload error:', error);
     
-    // Hide progress
-    const progressContainer = document.getElementById('uploadProgress');
-    if (progressContainer) progressContainer.style.display = 'none';
+    hideUploadOverlay();
     
-    // Show error
-    const errorMsg = state.language === 'en'
-      ? `❌ Upload failed: ${error.message}`
-      : `❌ Το ανέβασμα απέτυχε: ${error.message}`;
-    
-    showNotification(errorMsg, 'error');
+    showNotification(
+      `${state.language === 'en' ? '❌ Upload failed: ' : '❌ Το ανέβασμα απέτυχε: '}${error.message}`,
+      'error'
+    );
   }
   
   // Reset file input
   const fileInput = document.getElementById('fileInput');
   if (fileInput) fileInput.value = '';
+}
+
+// Helper sleep function
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+// Show full-screen upload overlay
+function showUploadOverlay() {
+  // Remove existing overlay
+  const existing = document.getElementById('uploadOverlay');
+  if (existing) existing.remove();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'uploadOverlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+  `;
+  
+  overlay.innerHTML = `
+    <div style="background: linear-gradient(135deg, #1F2937 0%, #111827 100%); border: 2px solid #FFB800; border-radius: 16px; padding: 40px; max-width: 500px; width: 90%; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);">
+      
+      <!-- Icon Animation -->
+      <div id="uploadIcon" style="text-align: center; font-size: 64px; margin-bottom: 20px; animation: pulse 2s infinite;">
+        📤
+      </div>
+      
+      <!-- Status Message -->
+      <h3 id="uploadStatusTitle" style="margin: 0 0 10px 0; color: #FFB800; text-align: center; font-size: 20px; font-weight: 600;">
+        Uploading...
+      </h3>
+      
+      <p id="uploadStatusMessage" style="margin: 0 0 25px 0; color: #9CA3AF; text-align: center; font-size: 14px;">
+        Preparing your file...
+      </p>
+      
+      <!-- Progress Bar -->
+      <div style="background-color: #1F2937; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 15px;">
+        <div id="uploadProgressBar" style="height: 100%; background: linear-gradient(90deg, #FFB800 0%, #FFC933 100%); width: 0%; transition: width 0.5s ease-out;"></div>
+      </div>
+      
+      <!-- Percentage -->
+      <div id="uploadPercentage" style="text-align: center; color: #E5E7EB; font-size: 24px; font-weight: 700;">
+        0%
+      </div>
+      
+      <!-- AI Analysis Notice -->
+      <div style="margin-top: 25px; padding: 15px; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 6px;">
+        <div style="font-size: 11px; color: #9CA3AF; text-align: center;">
+          <strong style="color: #3B82F6;">🤖 AI Analysis in Progress</strong><br>
+          ${state.language === 'en' 
+            ? 'Claude AI is analyzing your bank statement and categorizing transactions...' 
+            : 'Το Claude AI αναλύει το τραπεζικό σας αντίγραφο και κατηγοριοποιεί τις συναλλαγές...'}
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // Prevent scrolling
+  document.body.style.overflow = 'hidden';
+}
+
+// Update upload progress
+function updateUploadProgress(stage, message, percentage) {
+  const icon = document.getElementById('uploadIcon');
+  const title = document.getElementById('uploadStatusTitle');
+  const msg = document.getElementById('uploadStatusMessage');
+  const bar = document.getElementById('uploadProgressBar');
+  const percent = document.getElementById('uploadPercentage');
+  
+  if (!icon || !title || !msg || !bar || !percent) return;
+  
+  // Update icon based on stage
+  const icons = {
+    preparing: '📁',
+    uploading: '📤',
+    analyzing: '🤖',
+    processing: '⚙️',
+    finalizing: '✨',
+    complete: '✅'
+  };
+  
+  icon.textContent = icons[stage] || '📤';
+  
+  // Update title
+  const titles = {
+    preparing: state.language === 'en' ? 'Preparing...' : 'Προετοιμασία...',
+    uploading: state.language === 'en' ? 'Uploading...' : 'Ανέβασμα...',
+    analyzing: state.language === 'en' ? 'AI Analysis...' : 'Ανάλυση AI...',
+    processing: state.language === 'en' ? 'Processing...' : 'Επεξεργασία...',
+    finalizing: state.language === 'en' ? 'Finalizing...' : 'Ολοκλήρωση...',
+    complete: state.language === 'en' ? 'Complete!' : 'Ολοκληρώθηκε!'
+  };
+  
+  title.textContent = titles[stage] || 'Processing...';
+  msg.textContent = message;
+  bar.style.width = percentage + '%';
+  percent.textContent = percentage + '%';
+  
+  // Change color on complete
+  if (stage === 'complete') {
+    bar.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+    title.style.color = '#10b981';
+  }
+}
+
+// Hide upload overlay
+function hideUploadOverlay() {
+  const overlay = document.getElementById('uploadOverlay');
+  if (overlay) {
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s';
+    setTimeout(() => overlay.remove(), 300);
+  }
+  
+  // Restore scrolling
+  document.body.style.overflow = '';
+}
+
+// Show success dialog with options
+function showSuccessDialog(data) {
+  // Remove existing dialog
+  const existing = document.getElementById('successDialog');
+  if (existing) existing.remove();
+  
+  const dialog = document.createElement('div');
+  dialog.id = 'successDialog';
+  dialog.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.75);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s;
+  `;
+  
+  dialog.innerHTML = `
+    <div style="background: linear-gradient(135deg, #1F2937 0%, #111827 100%); border: 2px solid #10b981; border-radius: 16px; padding: 40px; max-width: 550px; width: 90%; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);">
+      
+      <!-- Success Icon -->
+      <div style="text-align: center; font-size: 72px; margin-bottom: 20px; animation: scaleIn 0.5s;">
+        ✅
+      </div>
+      
+      <!-- Title -->
+      <h2 style="margin: 0 0 15px 0; color: #10b981; text-align: center; font-size: 24px; font-weight: 700;">
+        ${state.language === 'en' ? 'Upload Successful!' : 'Επιτυχής Μεταφόρτωση!'}
+      </h2>
+      
+      <!-- Summary -->
+      <div style="background-color: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+          <div style="text-align: center;">
+            <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px;">
+              ${state.language === 'en' ? 'Transactions' : 'Συναλλαγές'}
+            </div>
+            <div style="font-size: 28px; font-weight: 700; color: #10b981;">
+              ${data.transactionCount || data.transactions?.length || 0}
+            </div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px;">
+              ${state.language === 'en' ? 'Net Flow' : 'Καθαρή Ροή'}
+            </div>
+            <div style="font-size: 28px; font-weight: 700; color: ${data.summary?.netCashFlow >= 0 ? '#10b981' : '#ef4444'};">
+              €${(data.summary?.netCashFlow || 0).toFixed(0)}
+            </div>
+          </div>
+        </div>
+        
+        ${data.predictions ? `
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(16, 185, 129, 0.3);">
+            <div style="text-align: center; font-size: 12px; color: #9CA3AF;">
+              🔮 <strong style="color: #10b981;">${(data.predictions.recurring?.length || 0) + (data.predictions.forecast?.length || 0)}</strong> 
+              ${state.language === 'en' ? 'AI predictions generated' : 'προβλέψεις AI δημιουργήθηκαν'}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+      
+      <!-- Analysis Message -->
+      ${data.analysis ? `
+        <div style="margin-bottom: 25px; padding: 15px; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 6px;">
+          <div style="font-size: 12px; color: #E5E7EB;">
+            💡 ${data.analysis}
+          </div>
+        </div>
+      ` : ''}
+      
+      <!-- Action Buttons -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <button 
+          onclick="closeSuccessDialog()" 
+          style="padding: 14px 20px; background-color: #374151; border: none; color: #E5E7EB; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.3s;">
+          ${state.language === 'en' ? 'Stay Here' : 'Παραμονή Εδώ'}
+        </button>
+        <button 
+          onclick="goToTransactions()" 
+          style="padding: 14px 20px; background-color: #10b981; border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; transition: all 0.3s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);">
+          ${state.language === 'en' ? '👉 View Transactions' : '👉 Προβολή Συναλλαγών'}
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(dialog);
+  
+  // Add click outside to close
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) {
+      closeSuccessDialog();
+    }
+  });
+}
+
+// Close success dialog
+function closeSuccessDialog() {
+  const dialog = document.getElementById('successDialog');
+  if (dialog) {
+    dialog.style.opacity = '0';
+    dialog.style.transition = 'opacity 0.3s';
+    setTimeout(() => dialog.remove(), 300);
+  }
+}
+
+// Go to transactions page
+function goToTransactions() {
+  closeSuccessDialog();
+  changePage('transactions');
 }
 
 
@@ -2672,7 +3094,18 @@ async function loadRecentUploads() {
     return;
   }
 
-  if (state.uploads.length === 0) {
+  try {
+    // Fetch from backend
+    const response = await fetch(`${API_BASE}/uploads`);
+    if (response.ok) {
+      const uploads = await response.json();
+      state.uploads = uploads;
+    }
+  } catch (error) {
+    console.error('Error fetching uploads:', error);
+  }
+
+  if (!state.uploads || state.uploads.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; padding: 40px;">
@@ -2690,54 +3123,50 @@ async function loadRecentUploads() {
   }
 
   tbody.innerHTML = state.uploads.map((upload, idx) => {
-    const uploadDate = upload.uploadDate ? new Date(upload.uploadDate).toLocaleString(state.language === 'el' ? 'el-GR' : 'en-US') : '-';
+    const uploadDate = upload.created_at ? new Date(upload.created_at).toLocaleString(state.language === 'el' ? 'el-GR' : 'en-US') : '-';
     
-    const statusIcon = upload.status === 'completed' ? '✅' : 
-                       upload.status === 'processing' ? '⏳' : 
-                       upload.status === 'failed' ? '❌' : '❓';
+    const statusConfig = {
+      completed: { icon: '✅', text: state.language === 'en' ? 'Completed' : 'Ολοκληρώθηκε', color: '#10b981' },
+      processing: { icon: '⏳', text: state.language === 'en' ? 'Processing' : 'Επεξεργασία', color: '#FFB800' },
+      failed: { icon: '❌', text: state.language === 'en' ? 'Failed' : 'Απέτυχε', color: '#ef4444' },
+      pending: { icon: '⏸️', text: state.language === 'en' ? 'Pending' : 'Εκκρεμεί', color: '#9CA3AF' }
+    };
     
-    const statusText = upload.status === 'completed' ? (state.language === 'en' ? 'Completed' : 'Ολοκληρώθηκε') : 
-                       upload.status === 'processing' ? (state.language === 'en' ? 'Processing' : 'Επεξεργασία') : 
-                       upload.status === 'failed' ? (state.language === 'en' ? 'Failed' : 'Απέτυχε') : 
-                       upload.status;
-    
-    const statusColor = upload.status === 'completed' ? '#10b981' : 
-                        upload.status === 'processing' ? '#FFB800' : 
-                        upload.status === 'failed' ? '#ef4444' : 
-                        '#9CA3AF';
+    const status = statusConfig[upload.status] || statusConfig.pending;
     
     return `
       <tr style="background-color: ${idx === 0 ? 'rgba(255, 184, 0, 0.05)' : 'transparent'};">
         <td>
-          <div style="font-weight: 600; color: var(--text-primary);">${upload.fileName}</div>
+          <div style="font-weight: 600; color: var(--text-primary);">${upload.file_name}</div>
           <div style="font-size: 11px; color: #6B7280; margin-top: 2px;">${uploadDate}</div>
         </td>
         <td>
-          <span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: ${statusColor}20; color: ${statusColor};">
-            ${statusIcon} ${statusText}
+          <span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: ${status.color}20; color: ${status.color};">
+            ${status.icon} ${status.text}
           </span>
         </td>
         <td style="text-align: right; font-weight: 600;">
-          ${upload.transactionCount || 0}
+          ${upload.transaction_count || 0}
         </td>
         <td style="text-align: right;">
-          ${upload.summary ? `
-            <div style="font-size: 12px;">
-              <span style="color: #10b981;">+€${(upload.summary.creditTotal || 0).toFixed(2)}</span> / 
-              <span style="color: #ef4444;">-€${(upload.summary.debitTotal || 0).toFixed(2)}</span>
+          ${upload.status === 'completed' ? `
+            <div style="font-size: 12px; color: #9CA3AF;">
+              ${upload.analysis || 'Analysis completed'}
+            </div>
+          ` : upload.status === 'failed' ? `
+            <div style="font-size: 11px; color: #ef4444;">
+              ${upload.error_message || 'Upload failed'}
             </div>
           ` : '-'}
         </td>
         <td style="text-align: center;">
-          ${upload.status === 'completed' && upload.transactions ? `
+          ${upload.status === 'completed' ? `
             <button 
-              onclick="showUploadDetails('${upload.id}')" 
+              onclick="changePage('transactions')" 
               class="btn-primary" 
               style="padding: 6px 12px; font-size: 12px;">
               ${state.language === 'en' ? '👁️ View' : '👁️ Προβολή'}
             </button>
-          ` : upload.error ? `
-            <span style="color: #ef4444; font-size: 11px;">${upload.error}</span>
           ` : '-'}
         </td>
       </tr>
@@ -2746,6 +3175,7 @@ async function loadRecentUploads() {
 
   console.log('✅ Loaded', state.uploads.length, 'uploads');
 }
+
 
 // Show notification toast
 function showNotification(message, type = 'info') {
@@ -2813,8 +3243,8 @@ function renderTransactions() {
     <div>
       <!-- Filters Card -->
       <div class="card" style="margin-bottom: 20px;">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">
-          ${state.language === 'en' ? 'Filters' : 'Φίλτρα'}
+        <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 15px;">
+          ${state.language === 'en' ? '🔍 Filters' : '🔍 Φίλτρα'}
         </h3>
         
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
@@ -2853,6 +3283,19 @@ function renderTransactions() {
               style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
           </div>
           
+          <!-- Category Filter - NEW -->
+          <div>
+            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
+              ${state.language === 'en' ? 'Category' : 'Κατηγορία'}
+            </label>
+            <select 
+              id="filterCategory" 
+              style="width: 100%; padding: 8px; background-color: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+              <option value="all">${state.language === 'en' ? 'All Categories' : 'Όλες οι Κατηγορίες'}</option>
+              <!-- Categories will be populated dynamically -->
+            </select>
+          </div>
+          
           <!-- Type -->
           <div>
             <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">
@@ -2887,8 +3330,8 @@ function renderTransactions() {
       
       <!-- Transactions Table -->
       <div class="card">
-        <h3 style="margin-bottom: 15px; font-weight: 300;">
-          ${state.language === 'en' ? 'Transactions' : 'Συναλλαγές'}
+        <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+          ${state.language === 'en' ? '📊 Transactions' : '📊 Συναλλαγές'}
         </h3>
         
         <div style="overflow-x: auto;">
@@ -2897,10 +3340,10 @@ function renderTransactions() {
               <tr>
                 <th>${state.language === 'en' ? 'Date' : 'Ημερομηνία'}</th>
                 <th>${state.language === 'en' ? 'Description' : 'Περιγραφή'}</th>
-                <th>${state.language === 'en' ? 'Amount' : 'Ποσό'}</th>
+                <th style="text-align: right;">${state.language === 'en' ? 'Amount' : 'Ποσό'}</th>
                 <th>${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
                 <th>${state.language === 'en' ? 'Category' : 'Κατηγορία'}</th>
-                <th>${state.language === 'en' ? 'Confidence' : 'Εμπιστοσύνη'}</th>
+                <th style="text-align: center;">${state.language === 'en' ? 'Confidence' : 'Εμπιστοσύνη'}</th>
               </tr>
             </thead>
             <tbody id="txnBody">
@@ -2919,6 +3362,90 @@ function renderTransactions() {
     </div>
   `;
 }
+
+
+// Load categories for filter dropdown
+async function loadCategoriesForFilter() {
+  try {
+    console.log('📋 Loading categories for filter...');
+    
+    const response = await fetch(`${API_BASE}/categories`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const categories = await response.json();
+    state.categories = categories;
+    
+    console.log('✅ Categories loaded:', categories.length);
+    
+    // Populate the dropdown
+    populateCategoryFilter(categories);
+    
+    return categories;
+  } catch (error) {
+    console.error('❌ Error loading categories:', error);
+    state.categories = [];
+    return [];
+  }
+}
+
+// Populate category filter dropdown
+function populateCategoryFilter(categories) {
+  const categorySelect = document.getElementById('filterCategory');
+  if (!categorySelect) {
+    console.warn('⚠️ Category filter dropdown not found');
+    return;
+  }
+  
+  // Keep "All Categories" option
+  const allOption = categorySelect.querySelector('option[value="all"]');
+  categorySelect.innerHTML = '';
+  if (allOption) {
+    categorySelect.appendChild(allOption);
+  } else {
+    categorySelect.innerHTML = `<option value="all">${state.language === 'en' ? 'All Categories' : 'Όλες οι Κατηγορίες'}</option>`;
+  }
+  
+  // Group by type
+  const creditCategories = categories.filter(c => c.type === 'CREDIT');
+  const debitCategories = categories.filter(c => c.type === 'DEBIT');
+  
+  // Add Income group
+  if (creditCategories.length > 0) {
+    const incomeGroup = document.createElement('optgroup');
+    incomeGroup.label = state.language === 'en' ? '💰 Income' : '💰 Εισόδημα';
+    
+    creditCategories.forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat.code;
+      option.textContent = state.language === 'en' ? cat.name_en : cat.name_el;
+      incomeGroup.appendChild(option);
+    });
+    
+    categorySelect.appendChild(incomeGroup);
+  }
+  
+  // Add Expense group
+  if (debitCategories.length > 0) {
+    const expenseGroup = document.createElement('optgroup');
+    expenseGroup.label = state.language === 'en' ? '💸 Expenses' : '💸 Έξοδα';
+    
+    debitCategories.forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat.code;
+      option.textContent = state.language === 'en' ? cat.name_en : cat.name_el;
+      expenseGroup.appendChild(option);
+    });
+    
+    categorySelect.appendChild(expenseGroup);
+  }
+  
+  console.log('✅ Category filter populated with', categories.length, 'categories');
+}
+
+
+
 function renderUpload() {
   return `
     <div>
@@ -3007,8 +3534,37 @@ async function changePage(page) {
   console.log('📄 Changing to page:', page);
   state.currentPage = page;
 
-  // Wait until render completes (if async)
-  await Promise.resolve(render());
+  // Special handling for ledger - load accounts BEFORE rendering
+  if (page === 'ledger') {
+    console.log('📖 Loading ledger page...');
+    
+    // Load accounts first
+    await loadAccounts();
+    console.log('✅ Accounts loaded:', state.accounts?.length || 0);
+    
+    // Set selected account
+    if (state.accounts && state.accounts.length > 0) {
+      state.selectedAccount = state.accounts[0].id;
+      console.log('✅ Selected account:', state.selectedAccount);
+    } else {
+      state.selectedAccount = null;
+      state.ledger = [];
+    }
+    
+    // NOW render the page (accounts are ready)
+    render();
+    
+    // Then load the ledger for selected account
+    if (state.selectedAccount) {
+      await loadAccountLedger(state.selectedAccount);
+      renderLedgerTable();
+    }
+    
+    return; // Exit early - we handled everything
+  }
+
+  // For all other pages, render first then load data
+  render();
 
   switch (page) {
     case 'dashboard':
@@ -3025,24 +3581,22 @@ async function changePage(page) {
       if (accounts) renderAccountsTable();
       break;
 
-    case 'predictions':
-      await new Promise(r => setTimeout(r, 100));
-      await loadPredictions();
-      renderPredictionsTable();
-      break;
+      case 'predictions':
+        console.log('🔮 Loading predictions page...');
+        render();
+        await new Promise(r => setTimeout(r, 100));
+        
+        try {
+          await loadPredictions();
+          renderPredictionsPage();
+        } catch (error) {
+          console.error('❌ Error loading predictions:', error);
+        }
+        break;
 
     case 'reports':
       await new Promise(r => setTimeout(r, 100));
       await loadReportsData();
-      break;
-
-    case 'ledger':
-      const accs = await loadAccounts();
-      if (accs?.length) {
-        state.selectedAccount = accs[0].id;
-        await loadAccountLedger(state.selectedAccount);
-        renderLedgerTable();
-      }
       break;
 
     case 'upload':
@@ -3051,7 +3605,6 @@ async function changePage(page) {
       break;
   }
 }
-
 
 
 function getPageTitle() {
@@ -3164,41 +3717,151 @@ function renderLedgerTable() {
     
     if (!tbody) return;
     
-    console.log('📊 Rendering ledger table with', state.ledger.length, 'entries');
+    console.log('📊 Rendering ledger table with', state.ledger?.length || 0, 'entries');
     
-    if (state.ledger.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #9CA3AF;">No ledger entries for this account</td></tr>';
+    // Check if we have a selected account
+    if (!state.selectedAccount) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 40px;">
+            <div style="font-size: 48px; margin-bottom: 15px;">📖</div>
+            <p style="color: #9CA3AF; margin-bottom: 8px;">
+              ${state.language === 'en' ? 'Select an account to view ledger entries' : 'Επιλέξτε λογαριασμό για προβολή καταχωρήσεων'}
+            </p>
+          </td>
+        </tr>
+      `;
       if (paginationContainer) paginationContainer.innerHTML = '';
       return;
     }
     
+    // Check if we have ledger entries
+    if (!state.ledger || state.ledger.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 40px;">
+            <div style="font-size: 48px; margin-bottom: 15px;">📭</div>
+            <p style="color: #9CA3AF; margin-bottom: 8px;">
+              ${state.language === 'en' ? 'No ledger entries for this account' : 'Δεν υπάρχουν καταχωρήσεις για αυτόν τον λογαριασμό'}
+            </p>
+            <p style="color: #6B7280; font-size: 12px;">
+              ${state.language === 'en' ? 'Upload transactions to populate the ledger' : 'Ανεβάστε συναλλαγές για να συμπληρώσετε το καθολικό'}
+            </p>
+          </td>
+        </tr>
+      `;
+      if (paginationContainer) paginationContainer.innerHTML = '';
+      return;
+    }
+    
+    // Apply filters
+    let filteredLedger = [...state.ledger];
+    
+    const dateFrom = document.getElementById('ledgerDateFrom')?.value;
+    const dateTo = document.getElementById('ledgerDateTo')?.value;
+    const reconciled = document.getElementById('ledgerReconciled')?.value;
+    
+    if (dateFrom) {
+      filteredLedger = filteredLedger.filter(e => e.entry_date >= dateFrom);
+    }
+    if (dateTo) {
+      filteredLedger = filteredLedger.filter(e => e.entry_date <= dateTo);
+    }
+    if (reconciled && reconciled !== 'all') {
+      filteredLedger = filteredLedger.filter(e => e.reconciled === parseInt(reconciled));
+    }
+    
     // Update total items
-    state.pagination.ledger.totalItems = state.ledger.length;
+    state.pagination.ledger.totalItems = filteredLedger.length;
     
     // Get paginated data
     const paginatedData = paginateData(
-      state.ledger,
+      filteredLedger,
       state.pagination.ledger.currentPage,
       state.pagination.ledger.itemsPerPage
     );
     
-    tbody.innerHTML = paginatedData.map(entry => `
-      <tr>
-        <td>${formatDate(entry.entry_date)}</td>
-        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${entry.description}</td>
-        <td style="text-align: right; color: #ef4444;">${entry.entry_type === 'DEBIT' ? formatCurrency(entry.amount) : '-'}</td>
-        <td style="text-align: right; color: #10b981;">${entry.entry_type === 'CREDIT' ? formatCurrency(entry.amount) : '-'}</td>
-        <td style="text-align: right; font-weight: 600;">${formatCurrency(entry.running_balance)}</td>
-        <td style="text-align: center;">${entry.reconciled ? '✓' : '-'}</td>
-      </tr>
-    `).join('');
+    // Render rows
+    tbody.innerHTML = paginatedData.map((entry, idx) => {
+      const isDebit = entry.entry_type === 'DEBIT';
+      const isCredit = entry.entry_type === 'CREDIT';
+      
+      return `
+        <tr style="border-left: 3px solid ${isDebit ? '#ef4444' : '#10b981'};">
+          <td style="font-weight: 500; color: var(--text-primary);">${formatDate(entry.entry_date)}</td>
+          <td style="max-width: 300px;">
+            <div style="font-weight: 500; color: var(--text-primary); margin-bottom: 3px;">${entry.description}</div>
+            ${entry.reference ? `<div style="font-size: 11px; color: #6B7280;">Ref: ${entry.reference}</div>` : ''}
+          </td>
+          <td style="text-align: right; font-family: 'Courier New', monospace;">
+            ${isDebit ? `<span style="color: #ef4444; font-weight: 600;">${formatCurrency(Math.abs(entry.amount))}</span>` : '<span style="color: #4B5563;">—</span>'}
+          </td>
+          <td style="text-align: right; font-family: 'Courier New', monospace;">
+            ${isCredit ? `<span style="color: #10b981; font-weight: 600;">${formatCurrency(Math.abs(entry.amount))}</span>` : '<span style="color: #4B5563;">—</span>'}
+          </td>
+          <td style="text-align: right; font-family: 'Courier New', monospace; background-color: rgba(255, 184, 0, 0.05); font-weight: 700; color: #FFB800;">
+            ${formatCurrency(entry.running_balance || 0)}
+          </td>
+          <td style="text-align: center;">
+            ${entry.reconciled 
+              ? '<span style="color: #10b981; font-size: 16px;">✓</span>' 
+              : '<span style="color: #6B7280; font-size: 16px;">○</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
     
     // Render pagination
     if (paginationContainer) {
-      paginationContainer.innerHTML = renderPagination('ledger', state.ledger.length);
+      paginationContainer.innerHTML = renderPagination('ledger', filteredLedger.length);
     }
   }, 100);
 }
+
+
+
+// Export ledger to CSV
+function exportLedger() {
+  if (!state.ledger || state.ledger.length === 0) {
+    showNotification(
+      state.language === 'en' ? 'No ledger entries to export' : 'Δεν υπάρχουν καταχωρήσεις για εξαγωγή',
+      'warning'
+    );
+    return;
+  }
+  
+  const selectedAccount = state.accounts.find(a => a.id === state.selectedAccount);
+  const accountName = selectedAccount ? selectedAccount.account_name : 'Unknown';
+  
+  // Create CSV content
+  let csv = 'Date,Description,Reference,Debit,Credit,Balance,Reconciled\n';
+  
+  state.ledger.forEach(entry => {
+    const debit = entry.entry_type === 'DEBIT' ? Math.abs(entry.amount).toFixed(2) : '';
+    const credit = entry.entry_type === 'CREDIT' ? Math.abs(entry.amount).toFixed(2) : '';
+    const reconciled = entry.reconciled ? 'Yes' : 'No';
+    
+    csv += `${entry.entry_date},"${entry.description}","${entry.reference || ''}",${debit},${credit},${entry.running_balance.toFixed(2)},${reconciled}\n`;
+  });
+  
+  // Download CSV
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Ledger_${accountName}_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+  
+  showNotification(
+    state.language === 'en' ? '✅ Ledger exported successfully' : '✅ Το καθολικό εξήχθη επιτυχώς',
+    'success'
+  );
+}
+
+
 // ========================================
 // CHART FUNCTIONS
 // ========================================
@@ -3412,6 +4075,421 @@ function renderReportsCharts() {
   console.log('✅ Category summary chart rendered');
 }
 
+function renderPredictions() {
+  const hasEnoughData = state.transactions && state.transactions.length >= 5;
+  const hasForecast = state.predictions?.forecast && state.predictions.forecast.length > 0;
+  const hasRecurring = state.predictions?.recurring && state.predictions.recurring.length > 0;
+  
+  return `
+    <div>
+      <!-- Page Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <h2 style="margin: 0; color: #FFB800; font-weight: 300;">🔮 ${t('predictions.title')}</h2>
+        ${hasEnoughData ? `
+          <button 
+            onclick="refreshPredictions()" 
+            class="btn-secondary"
+            style="padding: 8px 16px; font-size: 13px;">
+            ${state.language === 'en' ? '🔄 Refresh' : '🔄 Ανανέωση'}
+          </button>
+        ` : ''}
+      </div>
+
+      ${!hasEnoughData ? `
+        <!-- Not Enough Data State -->
+        <div class="card" style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); border: 2px dashed #3B82F6;">
+          <div style="font-size: 64px; margin-bottom: 20px;">🔮</div>
+          <h3 style="margin: 0 0 10px 0; color: #3B82F6;">
+            ${state.language === 'en' ? 'Not Enough Data for Predictions' : 'Ανεπαρκή Δεδομένα για Προβλέψεις'}
+          </h3>
+          <p style="color: #9CA3AF; margin-bottom: 25px; max-width: 500px; margin-left: auto; margin-right: auto;">
+            ${state.language === 'en' 
+              ? 'We need at least 5 transactions to generate meaningful predictions. Upload more bank statements to unlock forecasting.' 
+              : 'Χρειαζόμαστε τουλάχιστον 5 συναλλαγές για να δημιουργήσουμε προβλέψεις. Ανεβάστε περισσότερα αντίγραφα.'}
+          </p>
+          <div style="display: flex; gap: 15px; justify-content: center;">
+            <button 
+              onclick="changePage('upload')" 
+              class="btn-primary"
+              style="padding: 12px 24px; font-size: 14px;">
+              ${state.language === 'en' ? '📤 Upload Transactions' : '📤 Ανέβασμα Συναλλαγών'}
+            </button>
+            <button 
+              onclick="changePage('dashboard')" 
+              class="btn-secondary"
+              style="padding: 12px 24px; font-size: 14px;">
+              ${state.language === 'en' ? '← Back to Dashboard' : '← Πίσω στον Πίνακα'}
+            </button>
+          </div>
+        </div>
+      ` : `
+        <!-- Insights Summary Cards -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px;">
+          <div class="card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%); border-left: 4px solid #10b981;">
+            <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 8px;">
+              ${state.language === 'en' ? 'Recurring Patterns' : 'Επαναλαμβανόμενα Μοτίβα'}
+            </div>
+            <div style="font-size: 28px; font-weight: 700; color: #10b981; margin-bottom: 5px;">
+              ${hasRecurring ? state.predictions.recurring.length : 0}
+            </div>
+            <div style="font-size: 12px; color: #6B7280;">
+              ${state.language === 'en' ? 'Detected patterns' : 'Ανιχνευμένα μοτίβα'}
+            </div>
+          </div>
+          
+          <div class="card" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); border-left: 4px solid #3B82F6;">
+            <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 8px;">
+              ${state.language === 'en' ? 'Forecast Horizon' : 'Ορίζοντας Πρόβλεψης'}
+            </div>
+            <div style="font-size: 28px; font-weight: 700; color: #3B82F6; margin-bottom: 5px;">
+              ${hasForecast ? state.predictions.forecast.length : 0}
+            </div>
+            <div style="font-size: 12px; color: #6B7280;">
+              ${state.language === 'en' ? 'Months forecasted' : 'Μήνες πρόβλεψης'}
+            </div>
+          </div>
+          
+          <div class="card" style="background: linear-gradient(135deg, rgba(255, 184, 0, 0.1) 0%, rgba(255, 184, 0, 0.05) 100%); border-left: 4px solid #FFB800;">
+            <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 8px;">
+              ${state.language === 'en' ? 'Data Points' : 'Σημεία Δεδομένων'}
+            </div>
+            <div style="font-size: 28px; font-weight: 700; color: #FFB800; margin-bottom: 5px;">
+              ${state.transactions?.length || 0}
+            </div>
+            <div style="font-size: 12px; color: #6B7280;">
+              ${state.language === 'en' ? 'Total transactions' : 'Συνολικές συναλλαγές'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 25px;">
+          
+          <!-- Cash Flow Forecast Chart -->
+          <div class="card">
+            <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+              ${t('predictions.cashFlowForecast')}
+            </h3>
+            <div style="position: relative; height: 320px; width: 100%;">
+              <canvas id="forecastChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Recurring Patterns Pie Chart -->
+          <div class="card">
+            <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+              ${state.language === 'en' ? '🔄 Recurring Transaction Types' : '🔄 Τύποι Επαναλαμβανόμενων Συναλλαγών'}
+            </h3>
+            <div style="position: relative; height: 320px; width: 100%;">
+              <canvas id="recurringTypesChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Forecast Table -->
+        ${hasForecast ? `
+          <div class="card" style="margin-bottom: 25px;">
+            <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+              ${t('predictions.nextTransactions')}
+            </h3>
+            <div style="overflow-x: auto;">
+              <table class="table" style="width: 100%;">
+                <thead>
+                  <tr style="background-color: var(--bg-hover);">
+                    <th>${state.language === 'en' ? 'Period' : 'Περίοδος'}</th>
+                    <th style="text-align: right;">${state.language === 'en' ? 'Expected Income' : 'Αναμενόμενο Εισόδημα'}</th>
+                    <th style="text-align: right;">${state.language === 'en' ? 'Expected Expenses' : 'Αναμενόμενα Έξοδα'}</th>
+                    <th style="text-align: right;">${state.language === 'en' ? 'Net Flow' : 'Καθαρή Ροή'}</th>
+                    <th style="text-align: center;">${state.language === 'en' ? 'Confidence' : 'Εμπιστοσύνη'}</th>
+                    <th style="text-align: center;">${state.language === 'en' ? 'Trend' : 'Τάση'}</th>
+                  </tr>
+                </thead>
+                <tbody id="predictionsBody">
+                  <tr><td colspan="6" style="text-align: center; padding: 20px;">${t('common.loading')}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Recurring Transactions Table -->
+        ${hasRecurring ? `
+          <div class="card">
+            <h3 style="margin-bottom: 15px; font-weight: 300; font-size: 16px;">
+              ${t('predictions.recurringPatterns')}
+            </h3>
+            <div style="overflow-x: auto;">
+              <table class="table" style="width: 100%;">
+                <thead>
+                  <tr style="background-color: var(--bg-hover);">
+                    <th>${state.language === 'en' ? 'Description' : 'Περιγραφή'}</th>
+                    <th style="text-align: center;">${state.language === 'en' ? 'Frequency' : 'Συχνότητα'}</th>
+                    <th style="text-align: right;">${state.language === 'en' ? 'Avg Amount' : 'Μέσο Ποσό'}</th>
+                    <th style="text-align: center;">${state.language === 'en' ? 'Type' : 'Τύπος'}</th>
+                    <th style="text-align: right;">${state.language === 'en' ? 'Last Seen' : 'Τελευταία Εμφάνιση'}</th>
+                    <th style="text-align: center;">${state.language === 'en' ? 'Next Expected' : 'Επόμενη Αναμενόμενη'}</th>
+                  </tr>
+                </thead>
+                <tbody id="recurringBody">
+                  <tr><td colspan="6" style="text-align: center; padding: 20px;">${t('common.loading')}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : `
+          <div class="card" style="text-align: center; padding: 40px; background-color: rgba(100, 100, 100, 0.05);">
+            <div style="font-size: 48px; margin-bottom: 15px;">🔍</div>
+            <p style="color: #9CA3AF;">
+              ${state.language === 'en' 
+                ? 'No recurring patterns detected yet. Upload more transactions to identify patterns.' 
+                : 'Δεν ανιχνεύτηκαν επαναλαμβανόμενα μοτίβα. Ανεβάστε περισσότερες συναλλαγές.'}
+            </p>
+          </div>
+        `}
+      `}
+    </div>
+  `;
+}
+
+
+
+function renderPredictionsPage() {
+  setTimeout(() => {
+    console.log('🎨 Rendering predictions page...');
+    console.log('Predictions data:', state.predictions);
+    
+    // Render forecast table
+    const forecastBody = document.getElementById('predictionsBody');
+    if (forecastBody && state.predictions?.forecast?.length > 0) {
+      forecastBody.innerHTML = state.predictions.forecast.map((f, idx) => {
+        const netFlow = (f.predicted_income || 0) - Math.abs(f.predicted_expenses || 0);
+        const trend = idx > 0 ? 
+          (netFlow > state.predictions.forecast[idx - 1].net_flow ? '📈' : 
+           netFlow < state.predictions.forecast[idx - 1].net_flow ? '📉' : '➡️') : '➡️';
+        
+        return `
+          <tr>
+            <td style="font-weight: 600;">${f.month || f.period}</td>
+            <td style="text-align: right; color: #10b981; font-weight: 600;">
+              ${formatCurrency(f.predicted_income || 0)}
+            </td>
+            <td style="text-align: right; color: #ef4444; font-weight: 600;">
+              ${formatCurrency(Math.abs(f.predicted_expenses || 0))}
+            </td>
+            <td style="text-align: right; font-weight: 700; color: ${netFlow >= 0 ? '#10b981' : '#ef4444'};">
+              ${formatCurrency(netFlow)}
+            </td>
+            <td style="text-align: center;">
+              <span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; 
+                background-color: ${(f.confidence || 0) >= 0.8 ? 'rgba(16, 185, 129, 0.2)' : (f.confidence || 0) >= 0.6 ? 'rgba(255, 184, 0, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+                color: ${(f.confidence || 0) >= 0.8 ? '#10b981' : (f.confidence || 0) >= 0.6 ? '#FFB800' : '#ef4444'};">
+                ${((f.confidence || 0) * 100).toFixed(0)}%
+              </span>
+            </td>
+            <td style="text-align: center; font-size: 20px;">
+              ${trend}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    // Render recurring table
+    const recurringBody = document.getElementById('recurringBody');
+    if (recurringBody && state.predictions?.recurring?.length > 0) {
+      recurringBody.innerHTML = state.predictions.recurring.map(r => {
+        const frequency = r.occurrence_count || 0;
+        const avgDays = r.avg_days_between || 0;
+        const lastDate = r.last_occurrence ? new Date(r.last_occurrence) : null;
+        const nextDate = lastDate && avgDays > 0 ? new Date(lastDate.getTime() + (avgDays * 24 * 60 * 60 * 1000)) : null;
+        
+        return `
+          <tr>
+            <td>
+              <div style="font-weight: 600; margin-bottom: 3px;">${r.description}</div>
+              ${r.counterparty ? `<div style="font-size: 11px; color: #6B7280;">${r.counterparty}</div>` : ''}
+            </td>
+            <td style="text-align: center;">
+              <span style="padding: 4px 10px; border-radius: 4px; background-color: rgba(59, 130, 246, 0.2); color: #3B82F6; font-weight: 600; font-size: 12px;">
+                ${frequency}x
+              </span>
+            </td>
+            <td style="text-align: right; font-weight: 600; color: ${r.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+              ${formatCurrency(Math.abs(r.avg_amount || 0))}
+            </td>
+            <td style="text-align: center;">
+              <span style="padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;
+                background-color: ${r.type === 'CREDIT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+                color: ${r.type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+                ${r.type}
+              </span>
+            </td>
+            <td style="text-align: right; font-size: 13px; color: #9CA3AF;">
+              ${lastDate ? formatDate(r.last_occurrence) : '-'}
+            </td>
+            <td style="text-align: center; font-weight: 600; color: #FFB800;">
+              ${nextDate ? formatDate(nextDate.toISOString().split('T')[0]) : '-'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    // Draw charts
+    drawPredictionCharts();
+    
+    console.log('✅ Predictions page rendered');
+  }, 200);
+}
+
+
+function drawPredictionCharts() {
+  if (typeof Chart === 'undefined') {
+    console.error('❌ Chart.js not loaded!');
+    return;
+  }
+  
+  setTimeout(() => {
+    console.log('🎨 Drawing prediction charts...');
+    
+    // Forecast Chart
+    const forecastCtx = document.getElementById('forecastChart');
+    if (forecastCtx && state.predictions?.forecast?.length > 0) {
+      if (window.forecastChartInstance) {
+        window.forecastChartInstance.destroy();
+      }
+
+      try {
+        window.forecastChartInstance = new Chart(forecastCtx, {
+          type: 'bar',
+          data: {
+            labels: state.predictions.forecast.map(d => d.month || d.period),
+            datasets: [
+              { 
+                label: state.language === 'en' ? 'Expected Income' : 'Αναμενόμενο Εισόδημα', 
+                data: state.predictions.forecast.map(d => d.predicted_income || 0), 
+                backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                borderColor: '#10b981',
+                borderWidth: 2
+              },
+              { 
+                label: state.language === 'en' ? 'Expected Expenses' : 'Αναμενόμενα Έξοδα', 
+                data: state.predictions.forecast.map(d => Math.abs(d.predicted_expenses || 0)), 
+                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                borderColor: '#ef4444',
+                borderWidth: 2
+              }
+            ]
+          },
+          options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#E5E7EB', padding: 10 }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                padding: 12,
+                callbacks: {
+                  footer: function(tooltipItems) {
+                    const income = tooltipItems[0]?.parsed.y || 0;
+                    const expense = tooltipItems[1]?.parsed.y || 0;
+                    const net = income - expense;
+                    return '\n' + (state.language === 'en' ? 'Net: ' : 'Καθαρό: ') + '€' + net.toFixed(2);
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { 
+                  color: '#9CA3AF',
+                  callback: value => '€' + value.toLocaleString()
+                },
+                grid: { color: '#1F2937' }
+              },
+              x: {
+                ticks: { color: '#9CA3AF' },
+                grid: { color: '#1F2937' }
+              }
+            }
+          }
+        });
+        console.log('✅ Forecast chart created');
+      } catch (error) {
+        console.error('❌ Forecast chart error:', error);
+      }
+    }
+    
+    // Recurring Types Pie Chart
+    const recurringTypesCtx = document.getElementById('recurringTypesChart');
+    if (recurringTypesCtx && state.predictions?.recurring?.length > 0) {
+      if (window.recurringTypesChartInstance) {
+        window.recurringTypesChartInstance.destroy();
+      }
+      
+      try {
+        const creditCount = state.predictions.recurring.filter(r => r.type === 'CREDIT').length;
+        const debitCount = state.predictions.recurring.filter(r => r.type === 'DEBIT').length;
+        
+        window.recurringTypesChartInstance = new Chart(recurringTypesCtx, {
+          type: 'doughnut',
+          data: {
+            labels: [
+              state.language === 'en' ? 'Recurring Income' : 'Επαναλαμβανόμενο Εισόδημα',
+              state.language === 'en' ? 'Recurring Expenses' : 'Επαναλαμβανόμενα Έξοδα'
+            ],
+            datasets: [{
+              data: [creditCount, debitCount],
+              backgroundColor: ['#10b981', '#ef4444'],
+              borderColor: '#0F1419',
+              borderWidth: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#E5E7EB', padding: 15 }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                padding: 12
+              }
+            }
+          }
+        });
+        console.log('✅ Recurring types chart created');
+      } catch (error) {
+        console.error('❌ Recurring types chart error:', error);
+      }
+    }
+  }, 300);
+}
+
+
+async function refreshPredictions() {
+  console.log('🔄 Refreshing predictions...');
+  showNotification(
+    state.language === 'en' ? 'Refreshing predictions...' : 'Ανανέωση προβλέψεων...',
+    'info'
+  );
+  
+  await loadPredictions();
+  renderPredictionsPage();
+  
+  showNotification(
+    state.language === 'en' ? '✅ Predictions updated' : '✅ Οι προβλέψεις ενημερώθηκαν',
+    'success'
+  );
+}
+
+
 function renderPredictionsTable() {
   setTimeout(() => {
     console.log('🔮 Rendering predictions...');
@@ -3614,7 +4692,7 @@ async function uploadFile(file) {
 
     console.log('📨 Sending to backend...');
 
-    const response = await fetch('/api/files/upload', {
+    const response = await fetch('http://127.0.0.1:5001/api/files/upload', {
       method: 'POST',
       body: formData
     });
@@ -3806,15 +4884,257 @@ function handleDrop(e) {
 // INITIALIZATION
 // ========================================
 
+// ========================================
+// TUTORIAL SYSTEM - Simple & Lightweight
+// ========================================
+
+const tutorialSteps = {
+  en: [
+    { target: '.sidebar', title: '📊 Navigation', text: 'Use this menu to navigate between different sections', position: 'right' },
+    { target: '.dashboard-grid', title: '💰 Financial Overview', text: 'See your total balance, income, and expenses at a glance', position: 'bottom' },
+    { target: '#uploadButton', title: '📤 Upload Files', text: 'Click here to upload your bank statements - this is the most important step!', position: 'bottom', highlight: true },
+    { target: '.nav-link', title: '📈 Reports & Analytics', text: 'View detailed reports and charts after uploading your data', position: 'right' }
+  ],
+  el: [
+    { target: '.sidebar', title: '📊 Πλοήγηση', text: 'Χρησιμοποιήστε αυτό το μενού για πλοήγηση', position: 'right' },
+    { target: '.dashboard-grid', title: '💰 Οικονομική Επισκόπηση', text: 'Δείτε το συνολικό υπόλοιπο, εισόδημα και έξοδα', position: 'bottom' },
+    { target: '#uploadButton', title: '📤 Ανέβασμα Αρχείων', text: 'Κάντε κλικ εδώ για να ανεβάσετε τα τραπεζικά σας αντίγραφα - αυτό είναι το πιο σημαντικό βήμα!', position: 'bottom', highlight: true },
+    { target: '.nav-link', title: '📈 Αναφορές', text: 'Δείτε λεπτομερείς αναφορές μετά το ανέβασμα δεδομένων', position: 'right' }
+  ]
+};
+
+let currentTutorialStep = 0;
+
+function startTutorial() {
+  // Check if permanently disabled (localStorage - survives browser close)
+  if (localStorage.getItem('tutorialDisabled') === 'true') {
+    return; // Don't show
+  }
+  
+  // Check if skipped this session (sessionStorage - resets on page refresh)
+  if (sessionStorage.getItem('tutorialSkipped') === 'true') {
+    return; // Don't show this session
+  }
+  
+  // Show tutorial
+  currentTutorialStep = 0;
+  showTutorialStep(0);
+}
+function skipTutorial() {
+  // Skip for this session only
+  sessionStorage.setItem('tutorialSkipped', 'true');
+  closeTutorial();
+  console.log('✅ Tutorial skipped for this session');
+}
+
+function disableTutorial() {
+  // Disable permanently
+  localStorage.setItem('tutorialDisabled', 'true');
+  closeTutorial();
+  console.log('✅ Tutorial disabled permanently');
+  showNotification(
+    state.language === 'en' 
+      ? 'Tutorial disabled. You can re-enable it from Settings.' 
+      : 'Το tutorial απενεργοποιήθηκε. Μπορείτε να το ενεργοποιήσετε από τις Ρυθμίσεις.',
+    'info'
+  );
+}
+
+function closeTutorial() {
+  const overlay = document.getElementById('tutorialOverlay');
+  if (overlay) overlay.remove();
+}
+
+function showTutorialStep(stepIndex) {
+  const steps = tutorialSteps[state.language] || tutorialSteps.en;
+  
+  if (stepIndex >= steps.length) {
+    completeTutorial();
+    return;
+  }
+  
+  const step = steps[stepIndex];
+  currentTutorialStep = stepIndex;
+  
+  // Remove existing tutorial
+  closeTutorial();
+  
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'tutorialOverlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+  
+  // Find target element
+  const targetEl = document.querySelector(step.target);
+  
+  if (targetEl) {
+    // FIXED: Smaller, tighter spotlight
+    const rect = targetEl.getBoundingClientRect();
+    const spotlightSize = Math.max(rect.width, rect.height) + 40; // Reduced from +80
+    
+    overlay.style.background = `
+      radial-gradient(
+        circle at ${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px,
+        transparent ${spotlightSize / 2}px,
+        rgba(0, 0, 0, 0.85) ${spotlightSize / 2 + 10}px
+      )
+    `;
+    
+    // Add subtle border around spotlight
+    const spotlight = document.createElement('div');
+    spotlight.style.cssText = `
+      position: fixed;
+      top: ${rect.top - 8}px;
+      left: ${rect.left - 8}px;
+      width: ${rect.width + 16}px;
+      height: ${rect.height + 16}px;
+      border: 2px solid #FFB800;
+      border-radius: 8px;
+      pointer-events: none;
+      z-index: 10000;
+      box-shadow: 0 0 20px rgba(255, 184, 0, 0.5);
+    `;
+    document.body.appendChild(spotlight);
+    
+    // Remove spotlight when tutorial closes
+    setTimeout(() => {
+      const oldSpotlight = document.querySelector('[style*="border: 2px solid #FFB800"]');
+      if (oldSpotlight && oldSpotlight !== spotlight) oldSpotlight.remove();
+    }, 100);
+  }
+  
+  // Create tutorial card (rest remains the same)
+  const card = document.createElement('div');
+  card.style.cssText = `
+    background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+    border: 2px solid #FFB800;
+    border-radius: 12px;
+    padding: 25px;
+    max-width: 380px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    position: relative;
+    margin: 20px;
+    z-index: 10001;
+  `;
+  
+  card.innerHTML = `
+    <div style="margin-bottom: 15px;">
+      <h3 style="margin: 0 0 8px 0; color: #FFB800; font-size: 18px; font-weight: 600;">
+        ${step.title}
+      </h3>
+      <p style="margin: 0; color: #E5E7EB; font-size: 14px; line-height: 1.5;">
+        ${step.text}
+      </p>
+    </div>
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 15px;">
+      <div style="color: #9CA3AF; font-size: 12px;">
+        ${stepIndex + 1} / ${steps.length}
+      </div>
+      <div style="flex: 1; height: 3px; background: #1F2937; border-radius: 2px; overflow: hidden;">
+        <div style="width: ${((stepIndex + 1) / steps.length) * 100}%; height: 100%; background: #FFB800; transition: width 0.3s;"></div>
+      </div>
+    </div>
+    
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      ${stepIndex === 0 ? `
+        <button 
+          onclick="disableTutorial()" 
+          style="padding: 8px 12px; background: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; cursor: pointer; font-size: 12px; flex: 1; min-width: 120px;">
+          ${state.language === 'en' ? "Don't Show Again" : 'Μη Εμφανίζεται'}
+        </button>
+        <button 
+          onclick="skipTutorial()" 
+          style="padding: 8px 12px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px; flex: 1; min-width: 80px;">
+          ${state.language === 'en' ? 'Skip' : 'Παράλειψη'}
+        </button>
+      ` : `
+        <button 
+          onclick="skipTutorial()" 
+          style="padding: 8px 12px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px;">
+          ${state.language === 'en' ? 'Skip' : 'Παράλειψη'}
+        </button>
+      `}
+      
+      ${stepIndex > 0 ? `
+        <button 
+          onclick="showTutorialStep(${stepIndex - 1})" 
+          style="padding: 8px 12px; background: #374151; border: none; color: #E5E7EB; border-radius: 6px; cursor: pointer; font-size: 12px;">
+          ${state.language === 'en' ? '← Back' : '← Πίσω'}
+        </button>
+      ` : ''}
+      
+      <button 
+        onclick="showTutorialStep(${stepIndex + 1})" 
+        style="padding: 8px 12px; background: #FFB800; border: none; color: #000; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; flex: 1; min-width: 80px;">
+        ${stepIndex === steps.length - 1 
+          ? (state.language === 'en' ? '✓ Finish' : '✓ Τέλος')
+          : (state.language === 'en' ? 'Next →' : 'Επόμενο →')}
+      </button>
+    </div>
+  `;
+  
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      skipTutorial();
+    }
+  });
+}
+
+function completeTutorial() {
+  closeTutorial();
+  sessionStorage.setItem('tutorialSkipped', 'true');
+  showNotification(
+    state.language === 'en' 
+      ? '✅ Tutorial completed! Start by uploading your bank statements.' 
+      : '✅ Το tutorial ολοκληρώθηκε! Ξεκινήστε ανεβάζοντας τα τραπεζικά σας αντίγραφα.',
+    'success'
+  );
+}
+
+function resetTutorial() {
+  localStorage.removeItem('tutorialDisabled');
+  sessionStorage.removeItem('tutorialSkipped');
+  console.log('✅ Tutorial reset');
+  showNotification(
+    state.language === 'en' 
+      ? 'Tutorial re-enabled. Refresh the page to see it again.' 
+      : 'Το tutorial ενεργοποιήθηκε. Ανανεώστε τη σελίδα για να το δείτε ξανά.',
+    'success'
+  );
+}
+
+
 function init() {
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
   if (isLoggedIn) {
     state.isLoggedIn = true;
     state.currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    loadDashboard();
+    loadDashboard().then(() => {
+      // Start tutorial after dashboard loads (if not disabled)
+      setTimeout(() => {
+        startTutorial();
+      }, 1000);
+    });
   }
   render();
 }
+
 
 function handleFileSelect(event) {
   console.log('File select triggered');
@@ -3878,7 +5198,7 @@ async function uploadFile(file, uploadId) {
 
     console.log('Sending to backend...');
 
-    const response = await fetch('/api/files/upload', {
+    const response = await fetch('http://127.0.0.1:5001/api/files/upload', {
       method: 'POST',
       body: formData
     });
@@ -3963,6 +5283,9 @@ async function loadTransactions() {
     
     state.transactions = transactions;
     
+    // Load categories for filter - NEW
+    await loadCategoriesForFilter();
+    
     // Render table
     renderTransactionsTable();
     
@@ -3972,7 +5295,6 @@ async function loadTransactions() {
     return [];
   }
 }
-
 function renderTransactionsTable() {
   const tbody = document.getElementById('txnBody');
   const paginationContainer = document.getElementById('transactionsPagination');
