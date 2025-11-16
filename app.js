@@ -4885,7 +4885,7 @@ function handleDrop(e) {
 // ========================================
 
 // ========================================
-// TUTORIAL SYSTEM - Simple & Lightweight
+// TUTORIAL SYSTEM - FIXED CLEANUP
 // ========================================
 
 const tutorialSteps = {
@@ -4906,20 +4906,20 @@ const tutorialSteps = {
 let currentTutorialStep = 0;
 
 function startTutorial() {
-  // Check if permanently disabled (localStorage - survives browser close)
+  // Check if permanently disabled
   if (localStorage.getItem('tutorialDisabled') === 'true') {
-    return; // Don't show
+    return;
   }
   
-  // Check if skipped this session (sessionStorage - resets on page refresh)
+  // Check if skipped this session
   if (sessionStorage.getItem('tutorialSkipped') === 'true') {
-    return; // Don't show this session
+    return;
   }
   
-  // Show tutorial
   currentTutorialStep = 0;
   showTutorialStep(0);
 }
+
 function skipTutorial() {
   // Skip for this session only
   sessionStorage.setItem('tutorialSkipped', 'true');
@@ -4941,8 +4941,40 @@ function disableTutorial() {
 }
 
 function closeTutorial() {
+  console.log('🧹 Cleaning up tutorial...');
+  
+  // Remove overlay
   const overlay = document.getElementById('tutorialOverlay');
-  if (overlay) overlay.remove();
+  if (overlay) {
+    overlay.remove();
+    console.log('✅ Removed overlay');
+  }
+  
+  // Remove ALL spotlight borders (multiple selectors to be thorough)
+  const spotlights = document.querySelectorAll('.tutorial-spotlight');
+  spotlights.forEach(s => {
+    s.remove();
+    console.log('✅ Removed spotlight');
+  });
+  
+  // Remove by style attribute (backup cleanup)
+  const styledSpotlights = document.querySelectorAll('[style*="border: 2px solid #FFB800"]');
+  styledSpotlights.forEach(s => {
+    s.remove();
+    console.log('✅ Removed styled spotlight');
+  });
+  
+  // Remove by inline style (another backup)
+  const allDivs = document.querySelectorAll('div');
+  allDivs.forEach(div => {
+    const style = div.getAttribute('style');
+    if (style && style.includes('border: 2px solid #FFB800') && style.includes('position: fixed')) {
+      div.remove();
+      console.log('✅ Removed inline spotlight');
+    }
+  });
+  
+  console.log('✅ Tutorial cleanup complete');
 }
 
 function showTutorialStep(stepIndex) {
@@ -4956,144 +4988,142 @@ function showTutorialStep(stepIndex) {
   const step = steps[stepIndex];
   currentTutorialStep = stepIndex;
   
-  // Remove existing tutorial
+  // Clean up previous tutorial elements FIRST
   closeTutorial();
   
-  // Create overlay
-  const overlay = document.createElement('div');
-  overlay.id = 'tutorialOverlay';
-  overlay.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  `;
-  
-  // Find target element
-  const targetEl = document.querySelector(step.target);
-  
-  if (targetEl) {
-    // FIXED: Smaller, tighter spotlight
-    const rect = targetEl.getBoundingClientRect();
-    const spotlightSize = Math.max(rect.width, rect.height) + 40; // Reduced from +80
-    
-    overlay.style.background = `
-      radial-gradient(
-        circle at ${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px,
-        transparent ${spotlightSize / 2}px,
-        rgba(0, 0, 0, 0.85) ${spotlightSize / 2 + 10}px
-      )
-    `;
-    
-    // Add subtle border around spotlight
-    const spotlight = document.createElement('div');
-    spotlight.style.cssText = `
+  // Wait a moment for cleanup
+  setTimeout(() => {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'tutorialOverlay';
+    overlay.style.cssText = `
       position: fixed;
-      top: ${rect.top - 8}px;
-      left: ${rect.left - 8}px;
-      width: ${rect.width + 16}px;
-      height: ${rect.height + 16}px;
-      border: 2px solid #FFB800;
-      border-radius: 8px;
-      pointer-events: none;
-      z-index: 10000;
-      box-shadow: 0 0 20px rgba(255, 184, 0, 0.5);
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     `;
-    document.body.appendChild(spotlight);
     
-    // Remove spotlight when tutorial closes
-    setTimeout(() => {
-      const oldSpotlight = document.querySelector('[style*="border: 2px solid #FFB800"]');
-      if (oldSpotlight && oldSpotlight !== spotlight) oldSpotlight.remove();
-    }, 100);
-  }
-  
-  // Create tutorial card (rest remains the same)
-  const card = document.createElement('div');
-  card.style.cssText = `
-    background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
-    border: 2px solid #FFB800;
-    border-radius: 12px;
-    padding: 25px;
-    max-width: 380px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    position: relative;
-    margin: 20px;
-    z-index: 10001;
-  `;
-  
-  card.innerHTML = `
-    <div style="margin-bottom: 15px;">
-      <h3 style="margin: 0 0 8px 0; color: #FFB800; font-size: 18px; font-weight: 600;">
-        ${step.title}
-      </h3>
-      <p style="margin: 0; color: #E5E7EB; font-size: 14px; line-height: 1.5;">
-        ${step.text}
-      </p>
-    </div>
+    // Find target element
+    const targetEl = document.querySelector(step.target);
     
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 15px;">
-      <div style="color: #9CA3AF; font-size: 12px;">
-        ${stepIndex + 1} / ${steps.length}
-      </div>
-      <div style="flex: 1; height: 3px; background: #1F2937; border-radius: 2px; overflow: hidden;">
-        <div style="width: ${((stepIndex + 1) / steps.length) * 100}%; height: 100%; background: #FFB800; transition: width 0.3s;"></div>
-      </div>
-    </div>
-    
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-      ${stepIndex === 0 ? `
-        <button 
-          onclick="disableTutorial()" 
-          style="padding: 8px 12px; background: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; cursor: pointer; font-size: 12px; flex: 1; min-width: 120px;">
-          ${state.language === 'en' ? "Don't Show Again" : 'Μη Εμφανίζεται'}
-        </button>
-        <button 
-          onclick="skipTutorial()" 
-          style="padding: 8px 12px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px; flex: 1; min-width: 80px;">
-          ${state.language === 'en' ? 'Skip' : 'Παράλειψη'}
-        </button>
-      ` : `
-        <button 
-          onclick="skipTutorial()" 
-          style="padding: 8px 12px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px;">
-          ${state.language === 'en' ? 'Skip' : 'Παράλειψη'}
-        </button>
-      `}
+    if (targetEl) {
+      // FIXED: Smaller, tighter spotlight
+      const rect = targetEl.getBoundingClientRect();
+      const spotlightSize = Math.max(rect.width, rect.height) + 40;
       
-      ${stepIndex > 0 ? `
-        <button 
-          onclick="showTutorialStep(${stepIndex - 1})" 
-          style="padding: 8px 12px; background: #374151; border: none; color: #E5E7EB; border-radius: 6px; cursor: pointer; font-size: 12px;">
-          ${state.language === 'en' ? '← Back' : '← Πίσω'}
-        </button>
-      ` : ''}
+      overlay.style.background = `
+        radial-gradient(
+          circle at ${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px,
+          transparent ${spotlightSize / 2}px,
+          rgba(0, 0, 0, 0.85) ${spotlightSize / 2 + 10}px
+        )
+      `;
       
-      <button 
-        onclick="showTutorialStep(${stepIndex + 1})" 
-        style="padding: 8px 12px; background: #FFB800; border: none; color: #000; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; flex: 1; min-width: 80px;">
-        ${stepIndex === steps.length - 1 
-          ? (state.language === 'en' ? '✓ Finish' : '✓ Τέλος')
-          : (state.language === 'en' ? 'Next →' : 'Επόμενο →')}
-      </button>
-    </div>
-  `;
-  
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
-  
-  // Close on overlay click
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      skipTutorial();
+      // Add spotlight border with unique class
+      const spotlight = document.createElement('div');
+      spotlight.className = 'tutorial-spotlight'; // Add class for easy cleanup
+      spotlight.style.cssText = `
+        position: fixed;
+        top: ${rect.top - 8}px;
+        left: ${rect.left - 8}px;
+        width: ${rect.width + 16}px;
+        height: ${rect.height + 16}px;
+        border: 2px solid #FFB800;
+        border-radius: 8px;
+        pointer-events: none;
+        z-index: 10000;
+        box-shadow: 0 0 20px rgba(255, 184, 0, 0.5);
+      `;
+      document.body.appendChild(spotlight);
     }
-  });
+    
+    // Create tutorial card
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+      border: 2px solid #FFB800;
+      border-radius: 12px;
+      padding: 25px;
+      max-width: 380px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      position: relative;
+      margin: 20px;
+      z-index: 10001;
+    `;
+    
+    card.innerHTML = `
+      <div style="margin-bottom: 15px;">
+        <h3 style="margin: 0 0 8px 0; color: #FFB800; font-size: 18px; font-weight: 600;">
+          ${step.title}
+        </h3>
+        <p style="margin: 0; color: #E5E7EB; font-size: 14px; line-height: 1.5;">
+          ${step.text}
+        </p>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 15px;">
+        <div style="color: #9CA3AF; font-size: 12px;">
+          ${stepIndex + 1} / ${steps.length}
+        </div>
+        <div style="flex: 1; height: 3px; background: #1F2937; border-radius: 2px; overflow: hidden;">
+          <div style="width: ${((stepIndex + 1) / steps.length) * 100}%; height: 100%; background: #FFB800; transition: width 0.3s;"></div>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        ${stepIndex === 0 ? `
+          <button 
+            onclick="disableTutorial()" 
+            style="padding: 8px 12px; background: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; cursor: pointer; font-size: 12px; flex: 1; min-width: 120px;">
+            ${state.language === 'en' ? "Don't Show Again" : 'Μη Εμφανίζεται'}
+          </button>
+          <button 
+            onclick="skipTutorial()" 
+            style="padding: 8px 12px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px; flex: 1; min-width: 80px;">
+            ${state.language === 'en' ? 'Skip' : 'Παράλειψη'}
+          </button>
+        ` : `
+          <button 
+            onclick="skipTutorial()" 
+            style="padding: 8px 12px; background: transparent; border: 1px solid #6B7280; color: #9CA3AF; border-radius: 6px; cursor: pointer; font-size: 12px;">
+            ${state.language === 'en' ? 'Skip' : 'Παράλειψη'}
+          </button>
+        `}
+        
+        ${stepIndex > 0 ? `
+          <button 
+            onclick="showTutorialStep(${stepIndex - 1})" 
+            style="padding: 8px 12px; background: #374151; border: none; color: #E5E7EB; border-radius: 6px; cursor: pointer; font-size: 12px;">
+            ${state.language === 'en' ? '← Back' : '← Πίσω'}
+          </button>
+        ` : ''}
+        
+        <button 
+          onclick="showTutorialStep(${stepIndex + 1})" 
+          style="padding: 8px 12px; background: #FFB800; border: none; color: #000; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; flex: 1; min-width: 80px;">
+          ${stepIndex === steps.length - 1 
+            ? (state.language === 'en' ? '✓ Finish' : '✓ Τέλος')
+            : (state.language === 'en' ? 'Next →' : 'Επόμενο →')}
+        </button>
+      </div>
+    `;
+    
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        skipTutorial();
+      }
+    });
+  }, 100); // Small delay after cleanup
 }
 
 function completeTutorial() {
@@ -5110,6 +5140,7 @@ function completeTutorial() {
 function resetTutorial() {
   localStorage.removeItem('tutorialDisabled');
   sessionStorage.removeItem('tutorialSkipped');
+  closeTutorial(); // Clean up any leftover elements
   console.log('✅ Tutorial reset');
   showNotification(
     state.language === 'en' 
@@ -5118,6 +5149,7 @@ function resetTutorial() {
     'success'
   );
 }
+
 
 
 function init() {

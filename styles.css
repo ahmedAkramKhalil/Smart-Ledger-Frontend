@@ -1026,3 +1026,19 @@ canvas {
   position: relative;
 }
 
+
+
+/* Tutorial spotlight class for easy cleanup */
+.tutorial-spotlight {
+  position: fixed;
+  border: 2px solid #FFB800;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 0 20px rgba(255, 184, 0, 0.5);
+}
+
+/* Ensure tutorial overlay is above everything */
+#tutorialOverlay {
+  z-index: 99999 !important;
+}
