@@ -2951,10 +2951,17 @@ function closeSuccessDialog() {
 }
 
 // Go to transactions page
-function goToTransactions() {
+// Go to transactions page
+async function goToTransactions() {
   closeSuccessDialog();
-  changePage('transactions');
+  state.currentPage = 'transactions';
+  render();
+  
+  // Refresh transactions data
+  await loadTransactions();
+  renderTransactionsTable();
 }
+
 
 
 
@@ -5168,6 +5175,124 @@ function init() {
 }
 
 
+// ========================================
+// REFRESH ALL DATA FUNCTION
+// ========================================
+async function refreshAllData() {
+  console.log('🔄 Refreshing all data...');
+  
+  try {
+    // Create an array of refresh promises
+    const refreshPromises = [];
+    
+    // Always refresh these core data
+    refreshPromises.push(
+      loadTransactions().catch(err => {
+        console.error('Error loading transactions:', err);
+      })
+    );
+    
+    refreshPromises.push(
+      loadAccounts().catch(err => {
+        console.error('Error loading accounts:', err);
+      })
+    );
+    
+    // If we're on a specific page, refresh that page's data
+    switch(state.currentPage) {
+      case 'dashboard':
+        refreshPromises.push(
+          loadDashboard().catch(err => {
+            console.error('Error loading dashboard:', err);
+          })
+        );
+        break;
+        
+      case 'reports':
+        refreshPromises.push(
+          loadReportsData().catch(err => {
+            console.error('Error loading reports:', err);
+          })
+        );
+        break;
+        
+      case 'ledger':
+        if (state.selectedAccount) {
+          refreshPromises.push(
+            loadAccountLedger(state.selectedAccount).catch(err => {
+              console.error('Error loading ledger:', err);
+            })
+          );
+        }
+        break;
+        
+      case 'predictions':
+        refreshPromises.push(
+          loadPredictions().catch(err => {
+            console.error('Error loading predictions:', err);
+          })
+        );
+        break;
+        
+      case 'upload':
+        refreshPromises.push(
+          loadRecentUploads().catch(err => {
+            console.error('Error loading uploads:', err);
+          })
+        );
+        break;
+    }
+    
+    // Wait for all refreshes to complete
+    await Promise.all(refreshPromises);
+    
+    console.log('✅ All data refreshed successfully');
+    
+    // Re-render the current page content
+    const pageContentDiv = document.querySelector('.page-content');
+    if (pageContentDiv) {
+      pageContentDiv.innerHTML = renderPageContent();
+      
+      // Re-attach events and render tables based on current page
+      setTimeout(() => {
+        switch(state.currentPage) {
+          case 'dashboard':
+            renderDashboardCharts();
+            break;
+          case 'transactions':
+            renderTransactionsTable();
+            break;
+          case 'accounts':
+            renderAccountsTable();
+            break;
+          case 'reports':
+            loadReportsData();
+            break;
+          case 'ledger':
+            renderLedgerTable();
+            break;
+          case 'predictions':
+            renderPredictionsPage();
+            break;
+          case 'upload':
+            loadRecentUploads();
+            break;
+        }
+      }, 100);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error refreshing data:', error);
+    
+    // Fallback: reload the page if refresh fails
+    console.log('⚠️ Falling back to full page reload...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  }
+}
+
+
 function handleFileSelect(event) {
   console.log('File select triggered');
   
@@ -5257,13 +5382,10 @@ async function uploadFile(file, uploadId) {
     }
 
     if (data.success && data.transactions) {
-      state.uploads[idx].status = 'completed';
-      state.uploads[idx].transactionCount = data.transactionCount;
-      state.uploads[idx].transactions = data.transactions;
-      state.uploads[idx].analysis = data.analysis;
-      state.uploads[idx].summary = data.summary;
+      updateUploadProgress('processing', 'Processing transactions...', 70);
+      await sleep(500);
       
-      // Map transactions correctly
+      // Map transactions
       const mappedTransactions = data.transactions.map(txn => ({
         id: txn.id,
         date: txn.date,
@@ -5278,14 +5400,31 @@ async function uploadFile(file, uploadId) {
       }));
       
       state.transactions.push(...mappedTransactions);
-      render();
-      alert('✅ Success: ' + data.transactionCount + ' transactions imported');
+      
+      updateUploadProgress('finalizing', 'Finalizing...', 90);
+      await sleep(300);
+      
+      updateUploadProgress('complete', 'Upload complete!', 100);
+      await sleep(500);
+      
+      // Hide overlay
+      hideUploadOverlay();
+      
+      // Show success dialog
+      showSuccessDialog(data);
+      
+      // ⭐ REFRESH ALL DATA WITHOUT PAGE RELOAD ⭐
+      console.log('🔄 Starting data refresh...');
+      await refreshAllData();
+      
+      console.log('✅ Upload and refresh complete!');
+      
     } else {
       state.uploads[idx].status = 'failed';
       state.uploads[idx].error = 'Invalid response';
       render();
       alert('Invalid response from server');
-    }
+    } 
 
   } catch (error) {
     console.error('Upload error:', error);
