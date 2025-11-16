@@ -4925,7 +4925,7 @@ function simulateAIProgress() {
 }
 
 // ========================================
-// ENHANCED UPLOAD PROGRESS FUNCTIONS
+// ENHANCED UPLOAD SYSTEM - BILINGUAL
 // ========================================
 
 function showEnhancedUploadOverlay(fileName) {
@@ -4946,18 +4946,15 @@ function showEnhancedUploadOverlay(fileName) {
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(8px);
-    animation: fadeIn 0.3s;
   `;
   
   overlay.innerHTML = `
     <style>
       @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.05); } }
-      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
     </style>
     
-    <div style="background: linear-gradient(135deg, #1F2937 0%, #111827 100%); border: 2px solid #FFB800; border-radius: 20px; padding: 50px 40px; max-width: 600px; width: 90%; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7); animation: slideUp 0.4s;">
+    <div style="background: linear-gradient(135deg, #1F2937 0%, #111827 100%); border: 2px solid #FFB800; border-radius: 20px; padding: 50px 40px; max-width: 600px; width: 90%; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);">
       
       <div id="uploadIcon" style="text-align: center; margin-bottom: 25px;">
         <div style="font-size: 72px; animation: pulse 2s infinite;">📤</div>
@@ -4967,9 +4964,7 @@ function showEnhancedUploadOverlay(fileName) {
         <div style="font-size: 11px; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px;">
           ${state.language === 'en' ? 'Processing File' : 'Επεξεργασία Αρχείου'}
         </div>
-        <div style="font-size: 14px; color: #FFB800; font-weight: 600; word-break: break-all;">
-          ${fileName}
-        </div>
+        <div style="font-size: 14px; color: #FFB800; font-weight: 600; word-break: break-all;">${fileName}</div>
       </div>
       
       <div id="uploadStage" style="text-align: center; margin-bottom: 15px;">
@@ -4986,13 +4981,15 @@ function showEnhancedUploadOverlay(fileName) {
         ${state.language === 'en' ? 'Please wait...' : 'Παρακαλώ περιμένετε...'}
       </p>
       
-      <div style="background-color: #1F2937; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);">
+      <div style="background-color: #1F2937; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 12px;">
         <div id="uploadProgressBar" style="height: 100%; background: linear-gradient(90deg, #3B82F6 0%, #10b981 50%, #FFB800 100%); background-size: 200% 100%; width: 0%; transition: width 0.8s ease-out; animation: gradientShift 3s ease infinite;"></div>
       </div>
       
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
         <div id="uploadPercentage" style="color: #FFB800; font-size: 20px; font-weight: 700;">0%</div>
-        <div style="color: #9CA3AF; font-size: 12px;">${state.language === 'en' ? 'Est: 1-2 min' : 'Εκτίμηση: 1-2 λεπτά'}</div>
+        <div style="color: #9CA3AF; font-size: 12px;">
+          ${state.language === 'en' ? 'Est: 1-2 min' : 'Εκτίμηση: 1-2 λεπτά'}
+        </div>
       </div>
       
       <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 20px;">
@@ -5006,7 +5003,7 @@ function showEnhancedUploadOverlay(fileName) {
           <div style="font-size: 24px;">🤖</div>
           <div>
             <div style="font-size: 12px; color: #3B82F6; font-weight: 600; margin-bottom: 4px;">
-              ${state.language === 'en' ? 'AI-Powered Analysis' : 'Ανάλυση με AI'}
+              ${state.language === 'en' ? 'AI-Powered Analysis' : 'Ανάλυση με Τεχνητή Νοημοσύνη'}
             </div>
             <div style="font-size: 11px; color: #9CA3AF; line-height: 1.5;">
               ${state.language === 'en' 
@@ -5034,12 +5031,42 @@ function updateEnhancedProgress(stage, message, percentage) {
   if (!icon || !stageDiv || !title || !msg || !bar || !percent) return;
   
   const stageConfig = {
-    uploading: { icon: '📤', title: state.language === 'en' ? 'UPLOADING' : 'ΑΝΕΒΑΣΜΑ', color: '#3B82F6', bgColor: 'rgba(59, 130, 246, 0.2)' },
-    preparing: { icon: '📦', title: state.language === 'en' ? 'PREPARING' : 'ΠΡΟΕΤΟΙΜΑΣΙΑ', color: '#8B5CF6', bgColor: 'rgba(139, 92, 246, 0.2)' },
-    analyzing: { icon: '🤖', title: state.language === 'en' ? 'AI ANALYZING' : 'ΑΝΑΛΥΣΗ AI', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.2)' },
-    processing: { icon: '⚙️', title: state.language === 'en' ? 'PROCESSING' : 'ΕΠΕΞΕΡΓΑΣΙΑ', color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.2)' },
-    finalizing: { icon: '✨', title: state.language === 'en' ? 'FINALIZING' : 'ΟΛΟΚΛΗΡΩΣΗ', color: '#FFB800', bgColor: 'rgba(255, 184, 0, 0.2)' },
-    complete: { icon: '✅', title: state.language === 'en' ? 'COMPLETE' : 'ΟΛΟΚΛΗΡΩΘΗΚΕ', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.2)' }
+    uploading: { 
+      icon: '📤', 
+      title: state.language === 'en' ? 'UPLOADING' : 'ΑΝΕΒΑΣΜΑ', 
+      color: '#3B82F6', 
+      bgColor: 'rgba(59, 130, 246, 0.2)' 
+    },
+    preparing: { 
+      icon: '📦', 
+      title: state.language === 'en' ? 'PREPARING' : 'ΠΡΟΕΤΟΙΜΑΣΙΑ', 
+      color: '#8B5CF6', 
+      bgColor: 'rgba(139, 92, 246, 0.2)' 
+    },
+    analyzing: { 
+      icon: '🤖', 
+      title: state.language === 'en' ? 'AI ANALYZING' : 'ΑΝΑΛΥΣΗ AI', 
+      color: '#10b981', 
+      bgColor: 'rgba(16, 185, 129, 0.2)' 
+    },
+    processing: { 
+      icon: '⚙️', 
+      title: state.language === 'en' ? 'PROCESSING' : 'ΕΠΕΞΕΡΓΑΣΙΑ', 
+      color: '#F59E0B', 
+      bgColor: 'rgba(245, 158, 11, 0.2)' 
+    },
+    finalizing: { 
+      icon: '✨', 
+      title: state.language === 'en' ? 'FINALIZING' : 'ΟΛΟΚΛΗΡΩΣΗ', 
+      color: '#FFB800', 
+      bgColor: 'rgba(255, 184, 0, 0.2)' 
+    },
+    complete: { 
+      icon: '✅', 
+      title: state.language === 'en' ? 'COMPLETE' : 'ΟΛΟΚΛΗΡΩΘΗΚΕ', 
+      color: '#10b981', 
+      bgColor: 'rgba(16, 185, 129, 0.2)' 
+    }
   };
   
   const config = stageConfig[stage] || stageConfig.uploading;
@@ -5047,7 +5074,9 @@ function updateEnhancedProgress(stage, message, percentage) {
   icon.innerHTML = `<div style="font-size: 72px; animation: pulse 2s infinite;">${config.icon}</div>`;
   stageDiv.innerHTML = `<span style="display: inline-block; padding: 6px 16px; background-color: ${config.bgColor}; color: ${config.color}; border-radius: 20px; font-size: 12px; font-weight: 600;">${config.title}</span>`;
   title.textContent = message;
-  msg.textContent = stage === 'analyzing' ? (state.language === 'en' ? 'This is where the magic happens...' : 'Εδώ γίνεται η μαγεία...') : '';
+  msg.textContent = stage === 'analyzing' 
+    ? (state.language === 'en' ? 'This is where the magic happens...' : 'Εδώ γίνεται η μαγεία...') 
+    : '';
   bar.style.width = percentage + '%';
   percent.textContent = percentage + '%';
   
@@ -5062,8 +5091,28 @@ function simulateAIProgress() {
   const maxProgress = 82;
   
   const messages = {
-    en: ['🔍 Analyzing patterns...', '💰 Identifying income...', '💸 Categorizing expenses...', '🏷️ Applying labels...', '📊 Detecting recurring...', '🤖 Running predictions...', '🧮 Calculating totals...', '📈 Analyzing trends...'],
-    el: ['🔍 Ανάλυση μοτίβων...', '💰 Εντοπισμός εισοδήματος...', '💸 Κατηγοριοποίηση εξόδων...', '🏷️ Εφαρμογή ετικετών...', '📊 Εντοπισμός επαναλαμβανόμενων...', '🤖 Προβλέψεις AI...', '🧮 Υπολογισμός συνόλων...', '📈 Ανάλυση τάσεων...']
+    en: [
+      '🔍 Analyzing transaction patterns...',
+      '💰 Identifying income sources...',
+      '💸 Categorizing expenses...',
+      '🏷️ Applying smart labels...',
+      '📊 Detecting recurring payments...',
+      '🤖 Running AI predictions...',
+      '🧮 Calculating totals...',
+      '📈 Analyzing trends...',
+      '✨ Finalizing categories...'
+    ],
+    el: [
+      '🔍 Ανάλυση μοτίβων συναλλαγών...',
+      '💰 Εντοπισμός πηγών εισοδήματος...',
+      '💸 Κατηγοριοποίηση εξόδων...',
+      '🏷️ Εφαρμογή έξυπνων ετικετών...',
+      '📊 Εντοπισμός επαναλαμβανόμενων πληρωμών...',
+      '🤖 Εκτέλεση προβλέψεων AI...',
+      '🧮 Υπολογισμός συνόλων...',
+      '📈 Ανάλυση τάσεων...',
+      '✨ Ολοκλήρωση κατηγοριών...'
+    ]
   };
   
   const messageList = messages[state.language] || messages.en;
@@ -5086,6 +5135,241 @@ function simulateAIProgress() {
   }, 2000);
   
   return interval;
+}
+
+function hideUploadOverlay() {
+  const overlay = document.getElementById('uploadOverlay');
+  if (overlay) {
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s';
+    setTimeout(() => overlay.remove(), 300);
+  }
+  document.body.style.overflow = '';
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ========================================
+// FILE UPLOAD HANDLERS
+// ========================================
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+    uploadArea.style.backgroundColor = 'rgba(255, 184, 0, 0.15)';
+    uploadArea.style.borderColor = '#FFC933';
+  }
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+    uploadArea.style.backgroundColor = 'rgba(255, 184, 0, 0.05)';
+    uploadArea.style.borderColor = '#FFB800';
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+    uploadArea.style.backgroundColor = 'rgba(255, 184, 0, 0.05)';
+    uploadArea.style.borderColor = '#FFB800';
+  }
+  
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    uploadFile(files);
+  }
+}
+
+function handleFileSelect(e) {
+  const files = e.target.files;
+  if (files.length > 0) {
+    uploadFile(files);
+  }
+}
+
+async function uploadFile(files) {
+  const file = files[0] || files;
+  
+  if (!file || !file.name) {
+    console.error('❌ No valid file provided');
+    return;
+  }
+
+  try {
+    console.log('📤 Upload starting:', file.name);
+    
+    // IMMEDIATELY show enhanced overlay
+    showEnhancedUploadOverlay(file.name);
+    
+    // Stage 1: Uploading (0-20%)
+    updateEnhancedProgress('uploading', 
+      state.language === 'en' ? 'Uploading your file...' : 'Ανέβασμα του αρχείου σας...', 
+      5);
+    await sleep(800);
+    
+    updateEnhancedProgress('uploading', 
+      state.language === 'en' ? 'Securing connection...' : 'Ασφαλής σύνδεση...', 
+      10);
+    await sleep(500);
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    updateEnhancedProgress('uploading', 
+      state.language === 'en' ? 'Transmitting data...' : 'Μετάδοση δεδομένων...', 
+      15);
+    
+    // Upload file
+    const response = await fetch(`${API_BASE}/files/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    updateEnhancedProgress('uploading', 
+      state.language === 'en' ? 'Upload complete!' : 'Το ανέβασμα ολοκληρώθηκε!', 
+      20);
+    await sleep(600);
+
+    // Stage 2: Preparing (20-30%)
+    updateEnhancedProgress('preparing', 
+      state.language === 'en' ? 'Preparing your data...' : 'Προετοιμασία των δεδομένων σας...', 
+      22);
+    await sleep(700);
+    
+    updateEnhancedProgress('preparing', 
+      state.language === 'en' ? 'Validating file format...' : 'Επικύρωση μορφής αρχείου...', 
+      25);
+    await sleep(600);
+    
+    updateEnhancedProgress('preparing', 
+      state.language === 'en' ? 'Extracting transaction data...' : 'Εξαγωγή δεδομένων συναλλαγών...', 
+      28);
+    await sleep(700);
+
+    // Stage 3: AI Analysis (30-85%)
+    updateEnhancedProgress('analyzing', 
+      state.language === 'en' ? '🤖 Initializing Claude AI...' : '🤖 Εκκίνηση Claude AI...', 
+      30);
+    await sleep(800);
+    
+    updateEnhancedProgress('analyzing', 
+      state.language === 'en' ? '📖 Reading transaction entries...' : '📖 Ανάγνωση καταχωρήσεων συναλλαγών...', 
+      35);
+    
+    // Start simulated progress
+    const progressSimulation = simulateAIProgress();
+    
+    // Actual API call
+    const data = await response.json();
+    
+    // Stop simulation
+    clearInterval(progressSimulation);
+    
+    console.log('✅ Upload response:', data);
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    if (data.success && data.transactions) {
+      // Stage 4: Processing (85-95%)
+      updateEnhancedProgress('processing', 
+        state.language === 'en' ? '✅ AI analysis complete!' : '✅ Η ανάλυση AI ολοκληρώθηκε!', 
+        85);
+      await sleep(600);
+      
+      updateEnhancedProgress('processing', 
+        state.language === 'en' ? 'Processing transaction categories...' : 'Επεξεργασία κατηγοριών συναλλαγών...', 
+        88);
+      await sleep(500);
+      
+      updateEnhancedProgress('processing', 
+        state.language === 'en' ? 'Calculating insights...' : 'Υπολογισμός πληροφοριών...', 
+        92);
+      await sleep(500);
+      
+      // Map transactions
+      const mappedTransactions = data.transactions.map(txn => ({
+        id: txn.id,
+        date: txn.date,
+        description: txn.description,
+        amount: txn.amount,
+        type: txn.type,
+        category: txn.categoryCode,
+        categoryCode: txn.categoryCode,
+        confidence: txn.confidence,
+        counterparty: txn.counterparty || '',
+        reasoning: txn.reasoning || ''
+      }));
+      
+      state.transactions.push(...mappedTransactions);
+      
+      // Stage 5: Finalizing (95-100%)
+      updateEnhancedProgress('finalizing', 
+        state.language === 'en' ? 'Saving results...' : 'Αποθήκευση αποτελεσμάτων...', 
+        95);
+      await sleep(500);
+      
+      updateEnhancedProgress('finalizing', 
+        state.language === 'en' ? 'Updating dashboard...' : 'Ενημέρωση πίνακα ελέγχου...', 
+        98);
+      await sleep(400);
+      
+      updateEnhancedProgress('complete', 
+        state.language === 'en' ? '🎉 Upload successful!' : '🎉 Επιτυχής μεταφόρτωση!', 
+        100);
+      await sleep(800);
+      
+      // Hide overlay
+      hideUploadOverlay();
+      
+      // Show success dialog
+      showSuccessDialog(data);
+      
+      // Refresh uploads list
+      console.log('🔄 Refreshing uploads list...');
+      await loadRecentUploads();
+      
+      if (state.currentPage === 'upload') {
+        console.log('📄 Re-rendering upload page...');
+        const pageContent = document.querySelector('.page-content');
+        if (pageContent) {
+          pageContent.innerHTML = renderUpload();
+          await loadRecentUploads();
+        }
+      }
+      
+    } else {
+      throw new Error('Invalid response from server');
+    }
+
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    hideUploadOverlay();
+    showNotification(
+      state.language === 'en' 
+        ? `❌ Upload failed: ${error.message}`
+        : `❌ Το ανέβασμα απέτυχε: ${error.message}`,
+      'error'
+    );
+  }
+  
+  const fileInput = document.getElementById('fileInput');
+  if (fileInput) fileInput.value = '';
 }
 
 function displayFilePreview(upload) {
